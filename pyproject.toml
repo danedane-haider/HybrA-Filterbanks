@@ -21,5 +21,8 @@ classifiers = [
 [project.urls]
 Repository = "https://github.com/danedane-haider/Hybrid-Auditory-Filterbanks.git"
 
+[tool.hatch.build.targets.wheel]
+packages = ["hyba"]
+
 [tool.fixit]
 formatter = "ufmt"
