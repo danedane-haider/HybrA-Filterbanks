@@ -28,14 +28,12 @@ jobs:
         run: pipx install hatch
       - name: Build dist
         run: hatch build
-   
-   
-    - name: Upload release binary
-      uses: actions/upload-release-asset@v1.0.2
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
-      with:
-        upload_url: ${{ steps.get_release.outputs.upload_url }}
-        asset_path: ${{ github.workspace }}/dist/hybra-2024.0.0-py2.py3-none-any.whl
-        asset_name: ${{ steps.get_version.outputs.WHEEL }}
-        asset_content_type: application/zip
+      - name: Upload release binary
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.get_release.outputs.upload_url }}
+          asset_path: ${{ github.workspace }}/dist/hybra-2024.0.0-py2.py3-none-any.whl
+          asset_name: ${{ steps.get_version.outputs.WHEEL }}
+          asset_content_type: application/zip
