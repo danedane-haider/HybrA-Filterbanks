@@ -3,13 +3,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "hyba"
+name = "hybra"
 version = "2024.0.0"
 dependencies = [
   "pytorch",
+  "numpy",
 ]
 authors = [
-  {name = "The hyba project maintainers"},
+  {name = "The hybra project maintainers"},
 ]
 description = "A module for trainable encoder/decoder filterbanks with auditory bias."
 readme = "README.md"
@@ -22,7 +23,14 @@ classifiers = [
 Repository = "https://github.com/danedane-haider/Hybrid-Auditory-Filterbanks.git"
 
 [tool.hatch.build.targets.wheel]
-packages = ["hyba"]
+packages = ["hybra"]
 
+[tool.hatch.build.targets.sdist]
+exclude = [
+  "/.github",
+  "/docs",
+]
+
+[tool.hatch.version]
 [tool.fixit]
 formatter = "ufmt"
