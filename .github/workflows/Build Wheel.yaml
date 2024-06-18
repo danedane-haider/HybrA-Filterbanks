@@ -28,17 +28,12 @@ jobs:
         run: pipx install hatch
       - name: Build dist
         run: hatch build
-      - name: Get release
-        id: get_release
-        uses: bruceadams/get-release@v1.3.2
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-      - name: Upload release binary
-        uses: actions/upload-release-asset@v1.0.2
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@v4
         with:
-          upload_url: ${{ steps.get_release.outputs.upload_url }}
-          asset_path: ${{ github.workspace }}/dist/hybra-2024.0.0-py2.py3-none-any.whl
-          asset_name: hybra-2024.0.0-py2.py3-none-any.whl
-          asset_content_type: application/zip
+          # Name of the artifact to upload.
+          # Optional. Default is 'artifact'
+          name: hybra-2024.0.0-py2.py3-none-any.whl
+      
+          # A file, directory or wildcard pattern that describes what to upload
+          # Required.
+          path: ./dist/hybra-2024.0.0-py2.py3-none-any.whl
