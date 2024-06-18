@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from hybra.utils import audfilters
 import os
 
-__current_dir = os.path.dirname(os.path.realpath(__file__))
+_current_dir = os.path.dirname(os.path.realpath(__file__))
 
 class HybrA(nn.Module):
 
@@ -13,7 +13,7 @@ class HybrA(nn.Module):
         super().__init__()
 
         if pretrained:
-            with open(current_dir+"/hybra/ressources/auditory_filters_example.npy", "rb") as f:
+            with open(_current_dir+"/ressources/auditory_filters_example.npy", "rb") as f:
                 self.auditory_filters = torch.tensor(np.load(f), dtype=torch.complex64)
         else:
             self.auditory_filters = audfilters(n_filters, filter_length, hop_length, f_scale, sr)

@@ -1,1 +1,1 @@
-from hybridfilterbank import HybrA
+from .hybridfilterbank import HybrA
