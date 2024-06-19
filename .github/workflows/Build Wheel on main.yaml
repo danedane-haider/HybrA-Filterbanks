@@ -1,8 +1,9 @@
-name: Build Python Wheel
+name: Build Python Wheel on main
 
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - 'main'
 
 jobs:
   build:
@@ -30,10 +31,5 @@ jobs:
         run: hatch build
       - uses: actions/upload-artifact@v4
         with:
-          # Name of the artifact to upload.
-          # Optional. Default is 'artifact'
           name: hybra-2024.0.0-py2.py3-none-any.whl
-      
-          # A file, directory or wildcard pattern that describes what to upload
-          # Required.
           path: ./dist/hybra-2024.0.0-py2.py3-none-any.whl
