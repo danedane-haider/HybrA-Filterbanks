@@ -27,6 +27,8 @@ jobs:
           restore-keys: ${{ runner.os }}-pip-
       - name: Install Hatch
         run: pipx install hatch
+      - name: Test dist
+        run: hatch test
       - name: Build dist
         run: hatch build
       - uses: actions/upload-artifact@v4

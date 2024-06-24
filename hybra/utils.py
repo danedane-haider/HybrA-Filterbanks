@@ -1,16 +1,16 @@
 import numpy as np
 import torch
 
-def calculate_condition_number(w):
+def calculate_condition_number(w) -> torch.Tensor:
     """""
     Calculate the condition number of a convolution operator via the Littlewood Payley sum.
     Input: w (torch.tensor) - matrix with filter impulse respones in the columns
     Output: kappa (torch.tensor) - condition number of the convolution operator
     """""
-    w_hat = torch.sum(torch.abs(torch.fft.fft(w, dim=1)) ** 2, dim=0)
-    B = torch.max(w_hat, dim=0).values
-    A = torch.min(w_hat, dim=0).values
-    kappa = B/A
+    w_hat: torch.Tensor = torch.sum(torch.abs(torch.fft.fft(w, dim=1)) ** 2, dim=0)
+    B: torch.Tensor = torch.max(w_hat, dim=0).values
+    A: torch.Tensor = torch.min(w_hat, dim=0).values
+    kappa: torch.Tensor = B/A
     return kappa
 
 def audfilters(n_filters, filter_length, hop_length, frequency_scale, sr):

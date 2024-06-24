@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from hybra.utils import audfilters
 import os
 
-_current_dir = os.path.dirname(os.path.realpath(__file__))
+_current_dir: str = os.path.dirname(os.path.realpath(__file__))
 
 class HybrA(nn.Module):
 

@@ -28,9 +28,16 @@ packages = ["hybra"]
 [tool.hatch.build.targets.sdist]
 exclude = [
   "/.github",
+  "/.vscode"
   "/docs",
+  "/tests",
 ]
 
 [tool.hatch.version]
 [tool.fixit]
 formatter = "ufmt"
+
+[tool.hatch.envs.tests]
+features = [
+  "tests",
+]
