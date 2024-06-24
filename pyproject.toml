@@ -36,14 +36,3 @@ exclude = [
 [tool.hatch.version]
 [tool.fixit]
 formatter = "ufmt"
-
-[tool.hatch.envs.tests]
-features = [
-  "tests",
-]
-
-[tool.hatch.envs.tests.scripts]
-run = "pytest --cov=hybra --cov-report=term-missing tests/ --durations 0 -s {args:tests}"
-
-[[tool.hatch.envs.tests.matrix]]
-python = ["38", "39", "310", "311", "312"]

@@ -1,15 +1,5 @@
-import pytest
+import importlib.metadata
+import hybra as m
 
-
-class TestHelloWorld:
-    @pytest.fixture(autouse=True)
-    @pytest.mark.usefixtures("hello_world")
-    def setup_method(self, hello_world: str) -> None:
-        self.hello_world = hello_world
-
-    def teardown(self) -> None:
-        del self.hello_world
-
-    def test_hello_world(self) -> None:
-        assert isinstance(self.hello_world, str)
-        assert self.hello_world == "hello world!"
+def test_version():
+    assert importlib.metadata.version("hybra") == m.__version__
