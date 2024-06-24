@@ -28,9 +28,9 @@ packages = ["hybra"]
 [tool.hatch.build.targets.sdist]
 exclude = [
   "/.github",
-  "/.vscode"
+  "/.vscode",
   "/docs",
-  "/tests",
+  "/tests"
 ]
 
 [tool.hatch.version]
