@@ -142,4 +142,5 @@ cython_debug/
 
 .DS_Store
 
-HybrA-env
+.HybrA
+.vscode
