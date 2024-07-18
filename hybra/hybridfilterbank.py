@@ -94,12 +94,5 @@ class HybrA(nn.Module):
         return x.squeeze(1), x_real + 1j * x_imag
     @property
     def condition_number(self):
-        if self.random_dual_encoder:
-            coefficients_real = self.encoder_real.weight.detach().clone().squeeze(1)
-            coefficients_imag = self.encoder_imag.weight.detach().clone().squeeze(1)
-            return float(calculate_condition_number(coefficients_real)), float(
-                calculate_condition_number(coefficients_imag)
-            )
-        else:
-            coefficients = self.encoder.weight.detach().clone().squeeze(1)
-            return float(calculate_condition_number(coefficients))
+        coefficients = self.encoder.weight.detach().clone().squeeze(1)
+        return float(calculate_condition_number(coefficients))
