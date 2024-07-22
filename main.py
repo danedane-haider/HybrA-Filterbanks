@@ -5,7 +5,6 @@ import random
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from pesq import pesq_batch
 
@@ -41,7 +40,7 @@ def main(args):
     print(f"Using device: {device}")
 
 
-    model = HybridfilterbankModel(device=device)
+    model = HybridfilterbankModel()
 
     print(
         "Number of model parameters: ",
@@ -115,11 +114,11 @@ def main(args):
                 target_signal_fft = F.conv1d(
                     target_signal.unsqueeze(1),
                     model.filterbank.auditory_filters_real,
-                    stride=128,
+                    stride=model.filterbank.auditory_filters_stride,
                 ) + 1j * F.conv1d(
                     target_signal.unsqueeze(1),
                     model.filterbank.auditory_filters_imag,
-                    stride=128,
+                    stride=model.filterbank.auditory_filters_stride,
                 )
 
                 if KAPPA_BETA is not None:
@@ -166,11 +165,11 @@ def main(args):
                         target_signal_fft = F.conv1d(
                             target_signal.unsqueeze(1),
                             model.filterbank.auditory_filters_real,
-                            stride=128,
+                            stride=model.filterbank.auditory_filters_stride,
                         ) + 1j * F.conv1d(
                             target_signal.unsqueeze(1),
                             model.filterbank.auditory_filters_imag,
-                            stride=128,
+                            stride=model.filterbank.auditory_filters_stride,
                         )
 
                         if KAPPA_BETA is not None:

@@ -33,13 +33,16 @@ class NSNet(nn.Module):
         return x
     
 class HybridfilterbankModel(nn.Module):
-    def __init__(self, device=torch.device('cpu')):
+    def __init__(self):
         super().__init__()
 
-        self.filterbank = HybrA(device=device)
+        self.filterbank = HybrA()
         self.nsnet = NSNet()
 
     def forward(self, x):
         x = self.filterbank(x)
+        x = torch.log10(
+            torch.max(x, 1e-8 * torch.ones_like(x)))
         x = self.nsnet(x)
-        return self.filterbank.decoder(x)
+        x_coefficiants = x * self.filterbank.output_real_forward +1j * x * self.filterbank.output_imag_forward
+        return self.filterbank.decoder(x), x_coefficiants
