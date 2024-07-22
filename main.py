@@ -121,15 +121,13 @@ def main(args):
                 )
 
                 if KAPPA_BETA is not None:
-                    filterbank_weights = (
-                        model.filterbank.encoder.weight.squeeze(1),
-                    )
+                    filterbank_weights = model.filterbank.encoder.weight.squeeze(1)
                 else:
                     filterbank_weights = None
 
                 loss, loss_ = loss_fn(
                     enhanced_signal_fft, target_signal_fft,
-                    model.filterbank.encoder.weight.squeeze(1) 
+                    filterbank_weights
                 )
 
                 running_loss += loss.item()
@@ -172,9 +170,7 @@ def main(args):
                         )
 
                         if KAPPA_BETA is not None:
-                            filterbank_weights = (
-                                model.filterbank.encoder.weight.squeeze(1),
-                            )
+                            filterbank_weights = model.filterbank.encoder.weight.squeeze(1)
                         else:
                             filterbank_weights = None
 
