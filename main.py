@@ -112,11 +112,11 @@ def main(args):
 
                 target_signal_fft = F.conv1d(
                     target_signal.unsqueeze(1),
-                    model.filterbank.auditory_filters_real,
+                    model.filterbank.auditory_filters_real.to(target_signal.device),
                     stride=model.filterbank.auditory_filters_stride,
                 ) + 1j * F.conv1d(
                     target_signal.unsqueeze(1),
-                    model.filterbank.auditory_filters_imag,
+                    model.filterbank.auditory_filters_imag.to(target_signal.device),
                     stride=model.filterbank.auditory_filters_stride,
                 )
 
@@ -163,11 +163,11 @@ def main(args):
 
                         target_signal_fft = F.conv1d(
                             target_signal.unsqueeze(1),
-                            model.filterbank.auditory_filters_real,
+                            model.filterbank.auditory_filters_real.to(target_signal.device),
                             stride=model.filterbank.auditory_filters_stride,
                         ) + 1j * F.conv1d(
                             target_signal.unsqueeze(1),
-                            model.filterbank.auditory_filters_imag,
+                            model.filterbank.auditory_filters_imag.to(target_signal.device),
                             stride=model.filterbank.auditory_filters_stride,
                         )
 
