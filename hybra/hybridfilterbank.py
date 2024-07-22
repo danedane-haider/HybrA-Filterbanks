@@ -80,13 +80,13 @@ class HybrA(nn.Module):
             F.conv_transpose1d(
                 x_real,
                 self.auditory_filters_real,
-                stride=1,
+                stride=128,
                 padding=0,
             )
             + F.conv_transpose1d(
                 x_imag,
                 self.auditory_filters_imag,
-                stride=1,
+                stride=128,
                 padding=0,
             )
         )
