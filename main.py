@@ -115,11 +115,11 @@ def main(args):
                 target_signal_fft = F.conv1d(
                     target_signal.unsqueeze(1),
                     model.filterbank.auditory_filters_real,
-                    stride=1,
+                    stride=128,
                 ) + 1j * F.conv1d(
                     target_signal.unsqueeze(1),
                     model.filterbank.auditory_filters_imag,
-                    stride=1,
+                    stride=128,
                 )
 
                 if KAPPA_BETA is not None:
@@ -166,11 +166,11 @@ def main(args):
                         target_signal_fft = F.conv1d(
                             target_signal.unsqueeze(1),
                             model.filterbank.auditory_filters_real,
-                            stride=model.filterbank.auditory_filterbank_stride,
+                            stride=128,
                         ) + 1j * F.conv1d(
                             target_signal.unsqueeze(1),
                             model.filterbank.auditory_filters_imag,
-                            stride=model.filterbank.auditory_filterbank_stride,
+                            stride=128,
                         )
 
                         if KAPPA_BETA is not None:
