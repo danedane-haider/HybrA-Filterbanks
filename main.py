@@ -57,7 +57,6 @@ def main(args):
     writer = SummaryWriter(f"{LOGGING_DIR}")
 
     model = model.to(device)
-    breakpoint()
 
     if KAPPA_BETA is None:
         loss_fn = ComplexCompressedMSELoss()
