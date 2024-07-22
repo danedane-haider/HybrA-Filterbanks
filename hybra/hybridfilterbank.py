@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
-from hybra.utils import audfilters, calculate_condition_number
+from hybra.utils import audfilters, calculate_condition_number, fir_tightener3000
 import os
 
 _current_dir: str = os.path.dirname(os.path.realpath(__file__))
@@ -11,7 +11,8 @@ class HybrA(nn.Module):
     def __init__(self, 
             n_filters:int=256,
             kernel_size:int=23,
-            device=torch.device('cpu')):
+            device=torch.device('cpu'),
+            start_tight=True):
         super().__init__()
 
         with open(_current_dir+"/ressources/auditory_filters_speech_256.npy", "rb") as f:
@@ -27,6 +28,11 @@ class HybrA(nn.Module):
              stride=1, padding='same',
              bias=False,
              groups=n_filters)
+    
+        if start_tight:
+            self.encoder.weight = nn.Parameter(torch.tensor(fir_tightener3000(
+                self.encoder.weight.squeeze(1).detach().numpy(), kernel_size, eps=1.01
+            ),  dtype=torch.float32).unsqueeze(1))
         
     def forward(self, x:torch.Tensor) -> torch.Tensor:
         """Forward pass of the HybridFilterbank.

@@ -34,3 +34,60 @@ def smooth_fir(frequency_responses, support):
     g_re = np.real(gi[:support]).T * supper
     g_im = np.imag(gi[:support]).T * supper
     return g_re + 1j * g_im
+
+def tight(w, ver="S"):
+    """
+    Construction of the canonical tight filterbank
+    :param w: analysis filterbank
+    :param ver: version of the tight filterbank: 'S' yields canonical tight filterbank, 'flat_spec' yields tight filterbank with flat spectral response
+    :return: canonical tight filterbank
+    """
+    if ver == "S":
+        w_freqz = np.fft.fft(w, axis=1)
+        lp = np.sum(np.abs(w_freqz) ** 2, axis=0)
+        w_freqz_tight = w_freqz * lp ** (-0.5)
+        w_tight = np.fft.ifft(w_freqz_tight, axis=1)
+    elif ver == "flat_spec":
+        M, N = w.shape
+        w_freqz = np.fft.fft(w, axis=1).T
+        w_tight = np.zeros((M, N), dtype=np.complex64)
+        for k in range(N):
+            H = w_freqz[k, :]
+            U = H / np.linalg.norm(H)
+            w_tight[:, k] = np.conj(U)
+        w_tight = np.fft.ifft(w_tight.T, axis=0).T
+    else:
+        raise NotImplementedError
+    return w_tight
+
+def frame_bounds_lp(w, freq=False):
+    # if the filters are given already as frequency responses
+    if freq:
+        w_hat = np.sum(np.abs(w) ** 2, axis=1)
+    else:
+        w_hat = np.sum(np.abs(np.fft.fft(w, axis=1)) ** 2, axis=0)
+    B = np.max(w_hat)
+    A = np.min(w_hat)
+
+    return A, B
+
+def fir_tightener3000(w, supp, eps=1.1, print_kappa=False):
+    """
+    Iterative construction of a tight filterbank with a given support
+    :param w: analysis filterbank
+    :param supp: desired support of the tight filterbank
+    :param eps: desired precision for kappa = B/A
+    :return: tight filterbank
+    """
+    A, B = frame_bounds_lp(w)
+    w_tight = w.copy()
+    while B / A > eps:
+        w_tight = tight(w_tight)
+        w_tight[:, supp:] = 0
+        w_tight = np.real(w_tight)
+        A, B = frame_bounds_lp(w_tight)
+        kappa = B / A
+        error = np.linalg.norm(w - w_tight)
+        if print_kappa:
+            print("kappa:", "%.4f" % kappa, ", error:", "%.4f" % error)
+    return w_tight
