@@ -3,23 +3,18 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from hybra.utils import calculate_condition_number, fir_tightener3000
-import os
-
-_current_dir: str = os.path.dirname(os.path.realpath(__file__))
 
 class HybrA(nn.Module):
-    def __init__(self, start_tight:bool=True):
+    def __init__(self, path_to_auditory_filter_config, start_tight:bool=True):
         super().__init__()
 
-        with open(_current_dir+"/ressources/auditory_filters_speech_256.npy", "rb") as f:
-            auditory_filters = torch.tensor(np.load(f), dtype=torch.complex64)
-
-            self.auditory_filters_stride = 128
-            n_filters = 256
-            kernel_size = 23
+        config = torch.load(path_to_auditory_filter_config)
         
-        self.auditory_filters_real = auditory_filters.real.unsqueeze(1)
-        self.auditory_filters_imag = auditory_filters.imag.unsqueeze(1)
+        self.auditory_filters_real = config['auditory_filters_real']
+        self.auditory_filters_imag = config['auditory_filters_imag']
+        self.auditory_filters_stride = config['auditory_filters_stride']
+        n_filters = config['n_filters']
+        kernel_size = config['kernel_size']
 
         self.output_real_forward = None
         self.output_imag_forward = None

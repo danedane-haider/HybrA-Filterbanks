@@ -36,7 +36,7 @@ class HybridfilterbankModel(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.filterbank = HybrA()
+        self.filterbank = HybrA('auditory_filters_speech.pth')
         self.nsnet = NSNet()
 
     def forward(self, x):
