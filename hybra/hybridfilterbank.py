@@ -42,14 +42,14 @@ class HybrA(nn.Module):
         output_real = F.conv1d(
             x.unsqueeze(1),
             self.auditory_filters_real,
-            stride=1,
+            stride=128,
             padding=0,
         )
         self.output_real_forward = output_real.clone().detach()
         output_imag = F.conv1d(
             x.unsqueeze(1),
             self.auditory_filters_imag,
-            stride=1,
+            stride=128,
             padding=0,
         )
         self.output_imag_forward = output_imag.clone().detach()
