@@ -39,7 +39,6 @@ def main(args):
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     print(f"Using device: {device}")
 
-
     model = HybridfilterbankModel()
 
     print(
@@ -52,10 +51,10 @@ def main(args):
         ),
     )
 
+    model = model.to(device)
+
     # init tensorboard
     writer = SummaryWriter(f"{LOGGING_DIR}")
-
-    model = model.to(device)
 
     if KAPPA_BETA is None:
         loss_fn = ComplexCompressedMSELoss()
