@@ -10,8 +10,8 @@ class HybrA(nn.Module):
 
         config = torch.load(path_to_auditory_filter_config)
         
-        self.auditory_filters_real = config['auditory_filters_real']
-        self.auditory_filters_imag = config['auditory_filters_imag']
+        self.auditory_filters_real = torch.tensor(config['auditory_filters_real'])
+        self.auditory_filters_imag = torch.tensor(config['auditory_filters_imag'])
         self.auditory_filters_stride = config['auditory_filters_stride']
         n_filters = config['n_filters']
         kernel_size = config['kernel_size']
