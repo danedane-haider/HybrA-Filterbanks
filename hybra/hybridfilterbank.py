@@ -77,8 +77,13 @@ class HybrA(nn.Module):
         --------
         x (torch.Tensor) - output tensor of shape (batch_size, signal_length)
         """
-        x_real = x * self.output_real_forward
-        x_imag = x * self.output_imag_forward
+        if self.skip_connection:
+            x_real = x * self.output_real_forward + x
+            x_imag = x * self.output_imag_forward + x
+        else:
+            x_real = x * self.output_real_forward
+            x_imag = x * self.output_imag_forward
+
         x = (
             F.conv_transpose1d(
                 x_real,
