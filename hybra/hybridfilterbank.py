@@ -5,8 +5,10 @@ import torch.nn.functional as F
 from hybra.utils import calculate_condition_number, fir_tightener3000
 
 class HybrA(nn.Module):
-    def __init__(self, path_to_auditory_filter_config, start_tight:bool=True):
+    def __init__(self, path_to_auditory_filter_config, start_tight:bool=True, skip_connection=False):
         super().__init__()
+
+        self.skip_connection = skip_connection
 
         config = torch.load(path_to_auditory_filter_config)
         
@@ -58,10 +60,12 @@ class HybrA(nn.Module):
         )
         self.output_imag_forward = output_imag.clone().detach()
 
-        output_real = self.encoder(output_real)
-        output_imag = self.encoder(output_imag)
+        out = self.encoder(output_real)**2 + self.encoder(output_imag)**2
 
-        return output_real**2 + output_imag**2
+        if self.skip_connection:
+            out += output_real**2 + output_imag**2
+
+        return out
     
     def decoder(self, x:torch.Tensor) -> torch.Tensor:
         """Forward pass of the dual HybridFilterbank.
