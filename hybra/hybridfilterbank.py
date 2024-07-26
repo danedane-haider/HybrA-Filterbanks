@@ -9,7 +9,7 @@ class HybrA(nn.Module):
         super().__init__()
 
         self.skip_connection = skip_connection
-        config = torch.load(path_to_auditory_filter_config, weights_only=True, map_location="cpu")
+        config = torch.load(path_to_auditory_filter_config, weights_only=False, map_location="cpu")
         
         self.auditory_filters_real = torch.tensor(config['auditory_filters_real'])
         self.auditory_filters_imag = torch.tensor(config['auditory_filters_imag'])
