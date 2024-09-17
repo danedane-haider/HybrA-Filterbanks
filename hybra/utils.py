@@ -1,6 +1,27 @@
 import numpy as np
 import torch
 
+def random_filterbank(N, J, T, norm=True, support_only=False):
+    """""
+    Constructs a random filterbank of J filters of support T, padded with zeros to have length N.
+    Input: N (int) - signal length
+              J (int) - number of filters
+                T (int) - support of the filter or length of learned conv1d kernel (default: T=N)
+    Output: kappa (torch.tensor) - condition number of the convolution operator
+    """""
+    if T == None:
+        T = N
+    if norm:
+        w = torch.randn(J, T).div(torch.sqrt(torch.tensor(J*T)))
+    else:
+        w = torch.randn(J, T)
+    if support_only:
+        w_cat = w
+    else:
+        w_cat = torch.cat([w, torch.zeros(J, N-T)], dim=1)
+    return w_cat
+
+
 def calculate_condition_number(w) -> torch.Tensor:
     """""
     Calculate the condition number of a convolution operator via the Littlewood Payley sum.
@@ -71,23 +92,60 @@ def frame_bounds_lp(w, freq=False):
 
     return A, B
 
-def fir_tightener3000(w, supp, eps=1.1, print_kappa=False):
+def can_tight(w):
     """
-    Iterative construction of a tight filterbank with a given support
+    Construction of the canonical tight filterbank
+    :param w: analysis filterbank
+    :return: canonical tight filterbank
+    """
+    w_freqz = torch.fft.fft(w, dim=1)
+    lp = torch.sum(w_freqz.abs() ** 2, dim=0)
+    w_freqz_tight = w_freqz * lp ** (-0.5)
+    w_tight = torch.fft.ifft(w_freqz_tight, dim=1)
+    return w_tight
+
+def frame_bounds(w, frequency_domain=False):
+    if frequency_domain:
+        w_hat = torch.sum(w.abs() ** 2, dim=1)
+    else:
+        w_hat = torch.sum(torch.fft.fft(w, dim=1).abs() ** 2, dim=0)
+    B = torch.max(w_hat).item()
+    A = torch.min(w_hat).item()
+    return A, B
+
+def fir_tightener3000(w, supp, eps=1.01):
+    """
+    Iterative tightening procedure with fixed support for a given filterbank 
     :param w: analysis filterbank
     :param supp: desired support of the tight filterbank
     :param eps: desired precision for kappa = B/A
-    :return: tight filterbank
+    :return: approximately tight filterbank
     """
-    A, B = frame_bounds_lp(w)
-    w_tight = w.copy()
-    while B / A > eps:
-        w_tight = tight(w_tight)
+    A, B = frame_bounds(w)
+    kappa = B / A
+    w_tight = w.clone()
+    while kappa > eps:
+        w_tight = can_tight(w_tight)
         w_tight[:, supp:] = 0
-        w_tight = np.real(w_tight)
-        A, B = frame_bounds_lp(w_tight)
+        #w_tight = torch.real(w_tight)
+        A, B = frame_bounds(w_tight)
         kappa = B / A
-        error = np.linalg.norm(w - w_tight)
-        if print_kappa:
-            print("kappa:", "%.4f" % kappa, ", error:", "%.4f" % error)
+        #error = np.linalg.norm(w - w_tight)
+        #if print_kappa:
+        #print("kappa:", "%.4f" % kappa)
     return w_tight
+
+
+def fir_tightener4000(w, supp, eps=1.01):
+    """
+    Iterative tightening procedure with fixed support for a given filterbank
+    :param w: analysis filterbank
+    :param supp: desired support of the tight filterbank
+    :param eps: desired precision for kappa = B/A
+    :return: approximately tight filterbank, where every filter is additionally a tight filterbank
+    """
+    for i in range(w.shape[0]):
+        print(i)
+        filter = w[i,:].reshape(1,-1)
+        w[i,:] = fir_tightener3000(filter, supp, eps)
+    return w
