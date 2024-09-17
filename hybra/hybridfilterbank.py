@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from hybra_v2.utils import calculate_condition_number, fir_tightener3000, fir_tightener4000, random_filterbank
+from hybra.utils import calculate_condition_number, fir_tightener3000, fir_tightener4000, random_filterbank
 
 class HybrA(nn.Module):
-    def __init__(self, path_to_auditory_filter_config, start_tight:bool=True):
+    def __init__(self, path_to_auditory_filter_config, sig_len, fs, start_tight:bool=True):
         super().__init__()
 
         config = torch.load(path_to_auditory_filter_config, weights_only=False, map_location="cpu")
@@ -21,14 +21,13 @@ class HybrA(nn.Module):
         self.output_real_forward = None
         self.output_imag_forward = None
 
-        # k = torch.tensor(self.n_filters / (self.kernel_size * self.n_filters))
-        encoder_weight_real = random_filterbank(N=5*16000, J=self.n_filters, T=self.kernel_size)#(-torch.sqrt(k) - torch.sqrt(k)) * torch.rand([self.n_filters, 1, self.kernel_size]) + torch.sqrt(k)
-        encoder_weight_imag = random_filterbank(N=5*16000, J=self.n_filters, T=self.kernel_size)#(-torch.sqrt(k) - torch.sqrt(k)) * torch.rand([self.n_filters, 1, self.kernel_size]) + torch.sqrt(k)
+        encoder_weight_real = random_filterbank(N=sig_len*fs, J=self.n_filters, T=self.kernel_size)#(-torch.sqrt(k) - torch.sqrt(k)) * torch.rand([self.n_filters, 1, self.kernel_size]) + torch.sqrt(k)
+        encoder_weight_imag = random_filterbank(N=sig_len*fs, J=self.n_filters, T=self.kernel_size)#(-torch.sqrt(k) - torch.sqrt(k)) * torch.rand([self.n_filters, 1, self.kernel_size]) + torch.sqrt(k)
 
 
         if start_tight:
             auditory_filterbank = self.auditory_filters_real.squeeze(1)+ 1j*self.auditory_filters_imag.squeeze(1)
-            auditory_filterbank = F.pad(auditory_filterbank, (0,5*16000-self.auditory_filter_length))
+            auditory_filterbank = F.pad(auditory_filterbank, (0,sig_len*fs-self.auditory_filter_length))
             auditory_filterbank = fir_tightener3000(auditory_filterbank, self.auditory_filter_length, eps=1.01)
             self.auditory_filterbank = auditory_filterbank[:,:self.auditory_filter_length].unsqueeze(1)
 #            self.auditory_filters_real = torch.tensor(auditory_filterbank.real[:,:self.auditory_filter_length], dtype=torch.float32).unsqueeze(1)

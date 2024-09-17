@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import tqdm
 
 def random_filterbank(N, J, T, norm=True, support_only=False):
     """""
@@ -144,8 +145,7 @@ def fir_tightener4000(w, supp, eps=1.01):
     :param eps: desired precision for kappa = B/A
     :return: approximately tight filterbank, where every filter is additionally a tight filterbank
     """
-    for i in range(w.shape[0]):
-        print(i)
+    for i in tqdm.tqdm(range(w.shape[0]), desc="Tightening filters with fir-tightener4000"):
         filter = w[i,:].reshape(1,-1)
         w[i,:] = fir_tightener3000(filter, supp, eps)
     return w
