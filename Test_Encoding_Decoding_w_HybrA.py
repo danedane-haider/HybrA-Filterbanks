@@ -46,3 +46,4 @@ ax[1].legend()
 ax[1].set_title('Amplitude Error')
 plt.show()
 
+print("stop")

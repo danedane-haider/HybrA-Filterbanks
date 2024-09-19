@@ -22,8 +22,8 @@ class HybrA(nn.Module):
         self.output_imag_forward = None
 
         encoder_weight_real = random_filterbank(N=sig_len*fs, J=self.n_filters, T=self.kernel_size)#(-torch.sqrt(k) - torch.sqrt(k)) * torch.rand([self.n_filters, 1, self.kernel_size]) + torch.sqrt(k)
-        encoder_weight_imag = random_filterbank(N=sig_len*fs, J=self.n_filters, T=self.kernel_size)#(-torch.sqrt(k) - torch.sqrt(k)) * torch.rand([self.n_filters, 1, self.kernel_size]) + torch.sqrt(k)
-
+        encoder_weight_imag = random_filterbank(N=sig_len*fs, J=self.n_filters, T=self.kernel_size)
+        self.sig_len = sig_len*fs
 
         if start_tight:
             auditory_filterbank = self.auditory_filters_real.squeeze(1)+ 1j*self.auditory_filters_imag.squeeze(1)
@@ -122,18 +122,21 @@ class HybrA(nn.Module):
         --------
         x (torch.Tensor) - output tensor of shape (batch_size, signal_length)
         """
+        Lin = x_real.shape[-1]
+        kernel_size = self.hybra_filters_real.shape[-1]
+        padding_length = int((self.sig_len - (Lin-1)*self.auditory_filters_stride - kernel_size)/-2) #backward engineering from pytorch docu with dilation=1 and no output-padding
         x = (
             F.conv_transpose1d(
                 x_real,
                 self.hybra_filters_real,
                 stride=self.auditory_filters_stride,
-                padding=self.auditory_filter_length//2,
+                padding=padding_length#self.auditory_filter_length//2,
             )
             + F.conv_transpose1d(
                 x_imag,
                 self.hybra_filters_imag,
                 stride=self.auditory_filters_stride,
-                padding=self.auditory_filter_length//2,
+                padding=padding_length#self.auditory_filter_length//2,
             )
         )
 
