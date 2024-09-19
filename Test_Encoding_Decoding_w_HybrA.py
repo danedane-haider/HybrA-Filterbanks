@@ -34,6 +34,7 @@ print(f"Condition number Auditory Filters: {calculate_condition_number(hybra_fb.
 
 sf.write(os.path.join(OUTPATH, 'reconst_audio.wav'), audio_dec.detach().cpu().numpy().T, fs)
 
+#audio_dec = audio_dec[:,:80000].roll(-4095)
 
 print('Scaling-Factor: '+str(np.mean(audio[0].detach().cpu().numpy().squeeze()/audio_dec.detach().cpu().numpy().squeeze())))
 fig,ax = plt.subplots(nrows=2)

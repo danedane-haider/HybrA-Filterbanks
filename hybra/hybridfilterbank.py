@@ -80,13 +80,13 @@ class HybrA(nn.Module):
         self.hybra_filters_imag = kernel_imag.clone().detach()
         
         output_real = F.conv1d(
-            F.pad(x.unsqueeze(1), (self.auditory_filter_length//2, self.auditory_filter_length//2), mode='circular'),
+            F.pad(x.unsqueeze(1), (self.auditory_filter_length-1, 0), mode='circular'),
             kernel_real,
             stride=self.auditory_filters_stride,
         )
         
         output_imag = F.conv1d(
-            F.pad(x.unsqueeze(1), (self.auditory_filter_length//2,self.auditory_filter_length//2), mode='circular'),
+            F.pad(x.unsqueeze(1), (self.auditory_filter_length-1,0), mode='circular'),
             kernel_imag,
             stride=self.auditory_filters_stride,
         )
@@ -124,16 +124,16 @@ class HybrA(nn.Module):
         """
         Lin = x_real.shape[-1]
         kernel_size = self.hybra_filters_real.shape[-1]
-        padding_length = int((self.sig_len - (Lin-1)*self.auditory_filters_stride - kernel_size)/-2) #backward engineering from pytorch docu with dilation=1 and no output-padding
+        padding_length = kernel_size-1 #int((self.sig_len+(kernel_size-1) - (Lin-1)*self.auditory_filters_stride - kernel_size)/-2) #backward engineering from pytorch docu with dilation=1 and no output-padding
         x = (
             F.conv_transpose1d(
-                x_real,
+                F.pad(x_real, (0,kernel_size-1), mode='circular'),
                 self.hybra_filters_real,
                 stride=self.auditory_filters_stride,
                 padding=padding_length#self.auditory_filter_length//2,
             )
             + F.conv_transpose1d(
-                x_imag,
+                F.pad(x_imag, (0,kernel_size-1), mode='circular'),
                 self.hybra_filters_imag,
                 stride=self.auditory_filters_stride,
                 padding=padding_length#self.auditory_filter_length//2,
