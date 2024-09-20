@@ -4,10 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hybra"
-version = "2024.0.0"
+version = "2024.0.1"
 dependencies = [
   "torch",
   "numpy",
+  "tqdm"
 ]
 authors = [
   {name = "The hybra project maintainers"},
