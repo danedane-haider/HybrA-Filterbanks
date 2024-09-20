@@ -11,7 +11,7 @@ class HybrA(nn.Module):
 
         self.auditory_filters_real = torch.tensor(config['auditory_filters_real'])
         self.auditory_filters_imag = torch.tensor(config['auditory_filters_imag'])
-        self.auditory_filters_stride = 2#config['auditory_filters_stride']
+        self.auditory_filters_stride = 1#config['auditory_filters_stride']
         self.auditory_filter_length = self.auditory_filters_real.shape[-1]
         self.n_filters = config['n_filters']
         self.kernel_size = config['kernel_size']

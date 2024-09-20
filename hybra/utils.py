@@ -122,8 +122,8 @@ def kappa_alias(w, D):
     """
     w_hat = torch.fft.fft(w, dim=1)
     diag = torch.sum(w_hat.abs() ** 2, dim=0)
-    A = torch.min(diag).values
-    B = torch.max(diag).values
+    A = torch.min(diag)
+    B = torch.max(diag)
     kappa = B/A
     if D == 1:
         alias = 0
