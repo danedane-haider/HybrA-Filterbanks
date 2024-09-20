@@ -21,15 +21,35 @@ def random_filterbank(N, J, T, norm=True, support_only=False):
         w_cat = torch.cat([w, torch.zeros(J, N-T)], dim=1)
     return w_cat
 
-def calculate_condition_number(w) -> torch.Tensor:
-    """""
-    Calculate the condition number of a convolution operator via the Littlewood Payley sum.
-    Input: w (torch.tensor) - matrix with filter impulse respones in the columns
-    Output: kappa (torch.tensor) - condition number of the convolution operator
-    """""
-    w_hat: torch.Tensor = torch.sum(torch.abs(torch.fft.fft(w, dim=1)) ** 2, dim=0)
-    B: torch.Tensor = torch.max(w_hat, dim=0).values
-    A: torch.Tensor = torch.min(w_hat, dim=0).values
+# def calculate_condition_number(w, D=1) -> torch.Tensor:
+#     """""
+#     Calculate the condition number of a convolution operator via the Littlewood Payley sum.
+#     Input: w (torch.tensor) - matrix with filter impulse respones in the columns
+#     Output: kappa (torch.tensor) - condition number of the convolution operator
+#     """""
+#     w_hat: torch.Tensor = torch.sum(torch.abs(torch.fft.fft(w, dim=1)) ** 2, dim=0)
+#     B: torch.Tensor = torch.max(w_hat, dim=0).values
+#     A: torch.Tensor = torch.min(w_hat, dim=0).values
+#     kappa: torch.Tensor = B/A
+#     return kappa
+
+# new
+def calculate_condition_number(w, D=1) -> torch.Tensor:
+    """
+    Computes the frame bounds of the filterbank
+    :param w: analysis filterbank
+    :param D: decimation factor
+    :return: A, B - frame bounds
+    """
+    if D == 1:
+        w_hat: torch.Tensor = torch.sum(torch.fft.fft(w, dim=1).abs() ** 2, dim=0)
+        B: torch.Tensor = torch.max(w_hat, dim=0).values
+        A: torch.Tensor = torch.min(w_hat, dim=0).values
+    else:
+        W: torch.Tensor = fb_analysis(w, D)
+        sig: torch.Tensor = torch.svd(W).S
+        B: torch.Tensor = torch.max(sig**2).values
+        A: torch.Tensor = torch.min(sig**2).values
     kappa: torch.Tensor = B/A
     return kappa
 
@@ -93,24 +113,6 @@ def fb_analysis(w, D):
     W = W.unfold(1, N, 1).flip((-1,)).reshape(J*N, N)
     return W[::D, :]
 
-def frame_bounds(w, D=1):
-    """
-    Computes the frame bounds of the filterbank
-    :param w: analysis filterbank
-    :param D: decimation factor
-    :return: A, B - frame bounds
-    """
-    if D == 1:
-        w_hat = torch.sum(torch.fft.fft(w, dim=1).abs() ** 2, dim=0)
-        B = torch.max(w_hat).item()
-        A = torch.min(w_hat).item()
-    else:
-        W = fb_analysis(w, D)
-        sig = torch.svd(W).S
-        B = torch.max(sig**2).item()
-        A = torch.min(sig**2).item()
-    return A, B
-
 def kappa_alias(w, D):
     """
     Computes the condition number and aliasing term of the filterbank
@@ -120,8 +122,8 @@ def kappa_alias(w, D):
     """
     w_hat = torch.fft.fft(w, dim=1)
     diag = torch.sum(w_hat.abs() ** 2, dim=0)
-    A = torch.min(diag).item()
-    B = torch.max(diag).item()
+    A = torch.min(diag).values
+    B = torch.max(diag).values
     kappa = B/A
     if D == 1:
         alias = 0
