@@ -8,7 +8,8 @@ version = "2024.0.1"
 dependencies = [
   "torch",
   "numpy",
-  "tqdm"
+  "tqdm",
+  "soundfile"
 ]
 authors = [
   {name = "The hybra project maintainers"},
@@ -31,7 +32,9 @@ exclude = [
   "/.github",
   "/.vscode",
   "/docs",
-  "/tests"
+  "/tests",
+  "/audio",
+  "/filters",
 ]
 
 [tool.hatch.version]
