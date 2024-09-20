@@ -126,7 +126,7 @@ def kappa_alias(w, D):
     B = torch.max(diag)
     kappa = B/A
     if D == 1:
-        alias = 0
+        alias = torch.tensor([0])
     else:
         hop = w.shape[1]//D
         alias = torch.zeros(w_hat.shape)
