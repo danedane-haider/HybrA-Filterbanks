@@ -135,6 +135,15 @@ def kappa_alias(w, D):
         alias = torch.sum(alias, dim=0)
     return kappa, alias # minimize the sum of them
 
+def frame_bounds(w, frequency_domain=False):
+    if frequency_domain:
+        w_hat = torch.sum(w.abs() ** 2, dim=1)
+    else:
+        w_hat = torch.sum(torch.fft.fft(w, dim=1).abs() ** 2, dim=0)
+    B = torch.max(w_hat).item()
+    A = torch.min(w_hat).item()
+    return A, B
+
 def fir_tightener3000(w, supp, eps=1.01):
     """
     Iterative tightening procedure with fixed support for a given filterbank 
