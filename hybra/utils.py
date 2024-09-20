@@ -58,26 +58,80 @@ def smooth_fir(frequency_responses, support, time_domain=False):
     g_im = np.imag(imp[:support]).T * supper
     return torch.from_numpy(g_re + 1j * g_im)
 
-def can_tight(w):
+def can_tight(w, D=1):
     """
     Construction of the canonical tight filterbank
     :param w: analysis filterbank
+    :param D: decimation factor. Default is 1
     :return: canonical tight filterbank
     """
-    w_freqz = torch.fft.fft(w, dim=1)
-    lp = torch.sum(w_freqz.abs() ** 2, dim=0)
-    w_freqz_tight = w_freqz * lp ** (-0.5)
-    w_tight = torch.fft.ifft(w_freqz_tight, dim=1)
-    return w_tight
-
-def frame_bounds(w, frequency_domain=False):
-    if frequency_domain:
-        w_hat = torch.sum(w.abs() ** 2, dim=1)
+    if D == 1:
+        w_freqz = torch.fft.fft(w, dim=1)
+        lp = torch.sum(w_freqz.abs() ** 2, dim=0)
+        w_freqz_tight = w_freqz * lp ** (-0.5)
+        w_tight = torch.fft.ifft(w_freqz_tight, dim=1)
+        return w_tight
     else:
+        W = fb_analysis(w, D)
+        S = W.T @ W
+        lam, U = torch.linalg.eig(S)
+        lam_square = torch.sqrt(lam.real)**(-1)
+        S_inv_sqrt = (U @ torch.diag(lam_square).to(torch.complex64) @ U.T).to(torch.float32)
+        return (S_inv_sqrt @ w.T).T
+
+def fb_analysis(w, D):
+    """
+    Construction of the analysis operator matrix having all shifted copies of the filters as rows
+    :param w: analysis filterbank
+    :param D: decimation factor
+    :return: analysis operator matrix
+    """
+    N = w.shape[1]
+    J = w.shape[0]
+    w = w.flip((1,)).roll(1, 1)
+    W = torch.cat([w.flip((1,)), torch.narrow(w.flip((1,)), dim=1, start=0, length=N-1)], dim=1)
+    W = W.unfold(1, N, 1).flip((-1,)).reshape(J*N, N)
+    return W[::D, :]
+
+def frame_bounds(w, D=1):
+    """
+    Computes the frame bounds of the filterbank
+    :param w: analysis filterbank
+    :param D: decimation factor
+    :return: A, B - frame bounds
+    """
+    if D == 1:
         w_hat = torch.sum(torch.fft.fft(w, dim=1).abs() ** 2, dim=0)
-    B = torch.max(w_hat).item()
-    A = torch.min(w_hat).item()
+        B = torch.max(w_hat).item()
+        A = torch.min(w_hat).item()
+    else:
+        W = fb_analysis(w, D)
+        sig = torch.svd(W).S
+        B = torch.max(sig**2).item()
+        A = torch.min(sig**2).item()
     return A, B
+
+def kappa_alias(w, D):
+    """
+    Computes the condition number and aliasing term of the filterbank
+    :param w: analysis filterbank
+    :param D: decimation factor
+    :return: kappa, alias - condition number and aliasing term
+    """
+    w_hat = torch.fft.fft(w, dim=1)
+    diag = torch.sum(w_hat.abs() ** 2, dim=0)
+    A = torch.min(diag).item()
+    B = torch.max(diag).item()
+    kappa = B/A
+    if D == 1:
+        alias = 0
+    else:
+        hop = w.shape[1]//D
+        alias = torch.zeros(w_hat.shape)
+        for j in range(1,D):
+            alias += torch.abs(w_hat * torch.conj(torch.roll(w_hat,j*hop,1)))
+        alias = torch.sum(alias, dim=0)
+    return kappa, alias # minimize the sum of them
 
 def fir_tightener3000(w, supp, eps=1.01):
     """
