@@ -121,43 +121,6 @@ def can_tight(w, D=1):
         S_inv_sqrt = (U @ torch.diag(lam_square).to(torch.complex64) @ U.T).to(torch.float32)
         return (S_inv_sqrt @ w.T).T
 
-<<<<<<< HEAD
-def fb_analysis(w, D):
-    """
-    Construction of the analysis operator matrix having all shifted copies of the filters as rows
-    :param w: analysis filterbank
-    :param D: decimation factor
-    :return: analysis operator matrix
-    """
-    N = w.shape[1]
-    J = w.shape[0]
-    w = w.flip((1,)).roll(1, 1)
-    W = torch.cat([w.flip((1,)), torch.narrow(w.flip((1,)), dim=1, start=0, length=N-1)], dim=1)
-    W = W.unfold(1, N, 1).flip((-1,)).reshape(J*N, N)
-    return W[::D, :]
-
-def kappa_alias(w, D):
-    """
-    Computes the condition number and aliasing term of the filterbank
-    :param w: analysis filterbank
-    :param D: decimation factor
-    :return: kappa, alias - condition number and aliasing term
-    """
-    w_hat = torch.fft.fft(w, dim=1)
-    diag = torch.sum(w_hat.abs() ** 2, dim=0)
-    A = torch.min(diag).values
-    B = torch.max(diag).values
-    kappa = B/A
-    if D == 1:
-        alias = 0
-    else:
-        hop = w.shape[1]//D
-        alias = torch.zeros(w_hat.shape)
-        for j in range(1,D):
-            alias += torch.abs(w_hat * torch.conj(torch.roll(w_hat,j*hop,1)))
-        alias = torch.sum(alias, dim=0)
-    return kappa, alias # minimize the sum of them
-=======
 def frame_bounds_lp(w, freq=False):
     # if the filters are given already as frequency responses
     if freq:
@@ -189,7 +152,6 @@ def frame_bounds(w, frequency_domain=False):
     B = torch.max(w_hat).item()
     A = torch.min(w_hat).item()
     return A, B
->>>>>>> main
 
 def fir_tightener3000(w, supp, eps=1.01):
     """
@@ -210,16 +172,10 @@ def fir_tightener3000(w, supp, eps=1.01):
         kappa = B / A
         #error = np.linalg.norm(w - w_tight)
         #if print_kappa:
-<<<<<<< HEAD
-            #print("kappa:", "%.4f" % kappa, ", error:", "%.4f" % error)
-    return w_tight
-
-=======
         #print("kappa:", "%.4f" % kappa)
     return w_tight
 
 
->>>>>>> main
 def fir_tightener4000(w, supp, eps=1.01):
     """
     Iterative tightening procedure with fixed support for a given filterbank
@@ -228,11 +184,7 @@ def fir_tightener4000(w, supp, eps=1.01):
     :param eps: desired precision for kappa = B/A
     :return: approximately tight filterbank, where every filter is additionally a tight filterbank
     """
-<<<<<<< HEAD
-    for i in range(w.shape[0]):
-=======
     for i in tqdm.tqdm(range(w.shape[0]), desc="Tightening filters with fir-tightener4000"):
->>>>>>> main
         filter = w[i,:].reshape(1,-1)
         w[i,:] = fir_tightener3000(filter, supp, eps)
     return w
