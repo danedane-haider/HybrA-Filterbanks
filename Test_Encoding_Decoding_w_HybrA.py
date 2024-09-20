@@ -4,7 +4,7 @@ import soundfile as sf
 import matplotlib.pyplot as plt
 import numpy as np
 from hybra import HybrA
-from hybra.utils import calculate_condition_number 
+from hybra.utils import calculate_condition_number
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
