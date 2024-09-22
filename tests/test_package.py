@@ -28,7 +28,7 @@ def test_tightness():
     audio =  torch.tensor(audio[:5*fs], dtype=torch.float32)[None,...]
     hybra_fb(audio)
 
-    assert torch.allclose(hybra_fb.condition_number, torch.tensor(1.), atol=0.1)
+    assert torch.allclose(torch.tensor(hybra_fb.condition_number), torch.tensor(1.), atol=0.1)
 
 if __name__ == "__main__":
     test_reconstruction()
