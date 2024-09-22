@@ -2,7 +2,6 @@ import torch
 import soundfile
 
 from hybra import HybrA
-from hybra.utils import calculate_condition_number
 
 def test_reconstruction():
     hybra_fb = HybrA('./filters/auditory_filters_speech.pth')
@@ -29,4 +28,8 @@ def test_tightness():
     audio =  torch.tensor(audio[:5*fs], dtype=torch.float32)[None,...]
     hybra_fb(audio)
 
-    assert torch.allclose(calculate_condition_number(hybra_fb.hybra_filters.squeeze(1)), torch.tensor(1.), atol=0.1)
+    assert torch.allclose(hybra_fb.condition_number, torch.tensor(1.), atol=0.1)
+
+if __name__ == "__main__":
+    test_reconstruction()
+    test_tightness()

@@ -21,19 +21,6 @@ def random_filterbank(N, J, T, norm=True, support_only=False):
         w_cat = torch.cat([w, torch.zeros(J, N-T)], dim=1)
     return w_cat
 
-# def calculate_condition_number(w, D=1) -> torch.Tensor:
-#     """""
-#     Calculate the condition number of a convolution operator via the Littlewood Payley sum.
-#     Input: w (torch.tensor) - matrix with filter impulse respones in the columns
-#     Output: kappa (torch.tensor) - condition number of the convolution operator
-#     """""
-#     w_hat: torch.Tensor = torch.sum(torch.abs(torch.fft.fft(w, dim=1)) ** 2, dim=0)
-#     B: torch.Tensor = torch.max(w_hat, dim=0).values
-#     A: torch.Tensor = torch.min(w_hat, dim=0).values
-#     kappa: torch.Tensor = B/A
-#     return kappa
-
-# new
 def calculate_condition_number(w, D=1) -> torch.Tensor:
     """
     Computes the frame bounds of the filterbank
@@ -52,16 +39,6 @@ def calculate_condition_number(w, D=1) -> torch.Tensor:
         A: torch.Tensor = torch.min(sig**2).values
     kappa: torch.Tensor = B/A
     return kappa
-
-# def audfilters(n_filters, filter_length, hop_length, frequency_scale, sr):
-#     """""
-#     Constructs a set of filters *g* that are equidistantly spaced on a perceptual frequency scale (see |freqtoaud|) between 0 and the Nyquist frequency.
-#     The filter bandwidths are proportional to the  critical bandwidth of the auditory filters |audfiltbw|.
-#     The filters are intended to work with signals with a sampling rate of *fs*.
-#     The signal length *Ls* is mandatory, since we need to avoid too narrow frequency windows.
-#     """""
-#     g = np.zeros((n_filters, filter_length), dtype=np.complex64)
-#     return g
 
 def smooth_fir(frequency_responses, support, time_domain=False):
     """""
