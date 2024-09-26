@@ -1,34 +1,38 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from hybra.utils import calculate_condition_number, fir_tightener3000, fir_tightener4000, random_filterbank
+from hybra.utils import calculate_condition_number, fir_tightener3000, random_filterbank
 
 class HybrA(nn.Module):
     def __init__(self, path_to_auditory_filter_config, start_tight:bool=True):
         super().__init__()
-
+        
         config = torch.load(path_to_auditory_filter_config, weights_only=False, map_location="cpu")
 
-        self.auditory_filters_real = torch.tensor(config['auditory_filters_real'])
-        self.auditory_filters_imag = torch.tensor(config['auditory_filters_imag'])
-        self.auditory_filters_stride = 1#config['auditory_filters_stride']
+        self.auditory_filters_real = torch.tensor(config['auditory_filters_real'].clone().detach())
+        self.auditory_filters_imag = torch.tensor(config['auditory_filters_imag'].clone().detach())
+        self.auditory_filters_stride = config['auditory_filters_stride']
         self.auditory_filter_length = self.auditory_filters_real.shape[-1]
         self.n_filters = config['n_filters']
         self.kernel_size = config['kernel_size']
 
-        encoder_weight = random_filterbank(N=self.auditory_filter_length, J=self.n_filters, T=self.kernel_size)
+        encoder_weight = random_filterbank(N=self.auditory_filter_length, J=1, T=self.kernel_size, norm=True, support_only=False)
+        
+        self.auditory_filterbank = self.auditory_filters_real.squeeze(1)+ 1j*self.auditory_filters_imag.squeeze(1)
 
         if start_tight:
-            # TODO: Remove after corrected audlet
-            auditory_filterbank = self.auditory_filters_real.squeeze(1)+ 1j*self.auditory_filters_imag.squeeze(1)
-            self.auditory_filterbank = fir_tightener3000(auditory_filterbank, self.auditory_filter_length, eps=1.0001).unsqueeze(1)
+#             encoder_weight = fir_tightener4000(
+#                     encoder_weight.squeeze(1), self.kernel_size, 1,eps=1.1
+#                 ).unsqueeze(1)
 
-            encoder_weight = fir_tightener4000(
-                    encoder_weight.squeeze(1), self.kernel_size, eps=1.1
-                ).unsqueeze(1)
+            encoder_weight = fir_tightener3000(encoder_weight, self.kernel_size, eps=1.0001) # dauert ein bissi
+            encoder_weight = torch.cat(self.n_filters*[encoder_weight], dim=0)
+            encoder_weight = encoder_weight[:, :self.kernel_size]
 
         self.encoder_weight = nn.Parameter(encoder_weight, requires_grad=True)
         self.hybra_filters = torch.empty(self.auditory_filterbank.shape)
+        
+        breakpoint()
 
     def forward(self, x:torch.Tensor) -> torch.Tensor:
         """Forward pass of the HybridFilterbank.
@@ -42,7 +46,7 @@ class HybrA(nn.Module):
         x (torch.Tensor) - output tensor of shape (batch_size, n_filters, signal_length//hop_length)
         """
         kernel = torch.fft.ifft(
-            torch.fft.fft(self.auditory_filterbank.to(x.device).squeeze(1),dim=1) *
+            torch.fft.fft(self.auditory_filterbank.to(x.device).squeeze(1), dim=1) *
             torch.fft.fft(self.encoder_weight.squeeze(1), dim=1),
             dim=1
             ).unsqueeze(1)
@@ -53,13 +57,13 @@ class HybrA(nn.Module):
 
         output_real = F.conv1d(
             F.pad(x.unsqueeze(1), (padding_length, 0), mode='circular'),
-            kernel.real,
+            torch.fliplr(kernel.real),
             stride=self.auditory_filters_stride,
         )
 
         output_imag = F.conv1d(
-            F.pad(x.unsqueeze(1), (padding_length,0), mode='circular'),
-            kernel.imag,
+            F.pad(x.unsqueeze(1), (padding_length, 0), mode='circular'),
+            torch.fliplr(kernel.imag),
             stride=self.auditory_filters_stride,
         )
 
@@ -75,11 +79,11 @@ class HybrA(nn.Module):
 
         return F.conv1d(
             F.pad(x.unsqueeze(1), (padding_length, 0), mode='circular'),
-            self.hybra_filters.real.to(x.device),
+            torch.fliplr(self.hybra_filters.real.to(x.device)),
             stride=self.auditory_filters_stride,
         ) + 1j * F.conv1d(
             F.pad(x.unsqueeze(1), (padding_length,0), mode='circular'),
-            self.hybra_filters.imag.to(x.device),
+            torch.fliplr(self.hybra_filters.imag.to(x.device)),
             stride=self.auditory_filters_stride,
         )
 
@@ -98,20 +102,20 @@ class HybrA(nn.Module):
         x = (
             F.conv_transpose1d(
                 F.pad(x_real, (0,padding_length), mode='circular'),
-                self.hybra_filters.real,
+                torch.fliplr(self.hybra_filters.real),
                 stride=self.auditory_filters_stride,
                 padding=padding_length
             )
             + F.conv_transpose1d(
                 F.pad(x_imag, (0,padding_length), mode='circular'),
-                self.hybra_filters.imag,
+                torch.fliplr(self.hybra_filters.imag),
                 stride=self.auditory_filters_stride,
                 padding=padding_length
             )
         )
 
-        return self.auditory_filters_stride * x.squeeze(1)
+        return 2*self.auditory_filters_stride * x.squeeze(1)
 
     @property
     def condition_number(self):
-        return float(calculate_condition_number(self.hybra_filters.squeeze(1)))
+        return float(calculate_condition_number(self.hybra_filters.squeeze(1)), self.auditory_filters_stride)
