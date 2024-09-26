@@ -21,34 +21,40 @@ def random_filterbank(N, J, T, norm=True, support_only=False):
         w_cat = torch.cat([w, torch.zeros(J, N-T)], dim=1)
     return w_cat
 
-def frame_bounds(w, D):
+def frame_bounds(w, D=1):
     """
-    in: frequency responses of fb (system length, n_filters), decimation factor
-    out: frame bounds
+    :param w: impulse responses of fb (system length, n_filters)
+    :param D: decimation factor
     """
-    N = w.shape[0]
-    M = w.shape[1]
-    assert N % D == 0
+    w = torch.fft.fft(w, dim=-1).T
+    if D == 1:
+        lp = torch.sum(w.abs() ** 2, dim=1)
+        A = torch.min(lp)
+        B = torch.max(lp)
+    else:    
+        N = w.shape[0]
+        J = w.shape[1]
+        assert N % D == 0
 
-    A = torch.tensor([torch.inf])
-    B = torch.tensor([0])
-    Ha = torch.zeros((D,M))
-    Hb = torch.zeros((D,M))
+        A = torch.tensor([torch.inf])
+        B = torch.tensor([0])
+        Ha = torch.zeros((D,J))
+        Hb = torch.zeros((D,J))
 
-    for j in range(N//D):
-        idx_a = np.mod(j - np.arange(D) * (N//D), N).astype(int)
-        idx_b = np.mod(np.arange(D) * (N//D) - j, N).astype(int)
-        Ha = w[idx_a, :]
-        Hb = torch.conj(w[idx_b, :])
-        lam = torch.linalg.eigvalsh(Ha @ Ha.H + Hb @ Hb.H).real
-        A = torch.min(A, torch.min(lam))
-        B = torch.max(B, torch.max(lam))
+        for j in range(N//D):
+            idx_a = np.mod(j - np.arange(D) * (N//D), N).astype(int)
+            idx_b = np.mod(np.arange(D) * (N//D) - j, N).astype(int)
+            Ha = w[idx_a, :]
+            Hb = torch.conj(w[idx_b, :])
+            lam = torch.linalg.eigvalsh(Ha @ Ha.H + Hb @ Hb.H).real
+            A = torch.min(A, torch.min(lam))
+            B = torch.max(B, torch.max(lam))
     return A/D, B/D
     
 def calculate_condition_number(w, D) -> torch.Tensor:
     """
     Computes the frame bounds of the filterbank
-    :param w: frequency responses of fb (system length, n_filters)
+    :param w: impulse responses of fb (system length, n_filters)
     :param D: decimation factor
     :return: A, B - frame bounds
     """
@@ -77,8 +83,8 @@ def can_tight(w, D=1):
     :param D: decimation factor. Default is 1
     :return: canonical tight filterbank
     """
+    w = torch.fft.fft(w, dim=1)
     if D == 1:
-        w_hat = torch.fft.fft(w, dim=1)
         lp = torch.sum(w.abs() ** 2, dim=0)
         w_tight = w * lp ** (-0.5)
         return torch.fft.ifft(w_tight, dim=1)
@@ -92,7 +98,7 @@ def can_tight(w, D=1):
             U, S, V = torch.linalg.svd(H, full_matrices=False)
             H = U @ V
             w_tight[:,idx] = H.T
-        return torch.fft.ifft(w_tight.T, dim=1) * np.sqrt(D)
+        return torch.fft.ifft(torch.fft.ifft(w_tight.T, dim=1) * np.sqrt(D), dim=0).T
 
 def kappa_alias(w, D):
     w_hat = torch.fft.fft(w.T, dim=0)

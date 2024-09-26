@@ -4,13 +4,13 @@ import torch.nn.functional as F
 from hybra.utils import calculate_condition_number, fir_tightener3000, random_filterbank, kappa_alias
 
 class HybrA(nn.Module):
-    def __init__(self, path_to_auditory_filter_config, start_tight:bool=True):
+    def __init__(self, path_to_auditory_filter_config, start_tight=True):
         super().__init__()
         
         config = torch.load(path_to_auditory_filter_config, weights_only=False, map_location="cpu")
 
-        self.auditory_filters_real = torch.tensor(config['auditory_filters_real'].clone().detach())
-        self.auditory_filters_imag = torch.tensor(config['auditory_filters_imag'].clone().detach())
+        self.auditory_filters_real = config['auditory_filters_real'].clone().detach()
+        self.auditory_filters_imag = config['auditory_filters_imag'].clone().detach()
         self.auditory_filters_stride = config['auditory_filters_stride']
         self.auditory_filter_length = self.auditory_filters_real.shape[-1]
         self.n_filters = config['n_filters']
@@ -25,15 +25,11 @@ class HybrA(nn.Module):
 #                     encoder_weight.squeeze(1), self.kernel_size, 1,eps=1.1
 #                 ).unsqueeze(1)
 
-            encoder_weight = fir_tightener3000(torch.fft.fft(encoder_weight,dim=-1).T, self.kernel_size, eps=1.0001)
-            encoder_weight = torch.fft.ifft(encoder_weight.T, dim=-1)
-            encoder_weight = torch.cat(self.n_filters*[encoder_weight[:, :self.kernel_size]], dim=0)
- #           encoder_weight = encoder_weight[:, :self.kernel_size]
+            encoder_weight = fir_tightener3000(encoder_weight, self.kernel_size, eps=1.005)
+            encoder_weight = torch.cat(self.n_filters*[encoder_weight], dim=0)
 
         self.encoder_weight = nn.Parameter(encoder_weight, requires_grad=True)
         self.hybra_filters = torch.empty(self.auditory_filterbank.shape)
-        
-        breakpoint()
 
     def forward(self, x:torch.Tensor) -> torch.Tensor:
         """Forward pass of the HybridFilterbank.
