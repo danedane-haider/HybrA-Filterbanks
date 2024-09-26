@@ -120,7 +120,7 @@ def fir_tightener3000(w, supp, D=1, eps=1.01):
     kappa = calculate_condition_number(w, D)
     w_tight = w.clone()
     while kappa > eps:
-        w_tight = can_tight_polyphase(w_tight)
+        w_tight = can_tight(w_tight)
         w_tight[:, supp:] = 0
         kappa = calculate_condition_number(w_tight, D)
     return w_tight
@@ -150,7 +150,7 @@ def fir_tightener5000(w, supp, D=1, eps=1.01):
     kappa = calculate_condition_number(W, D)
     w_tight = W.clone()
     while kappa > eps:
-        w_tight = can_tight_polyphase(w_tight, D)
+        w_tight = can_tight(w_tight, D)
         w_tight = torch.fft.ifft(w_tight.T, dim=1)
         w_tight[:, supp:] = 0
         w_tight = torch.fft.fft(w_tight.T, dim=0)

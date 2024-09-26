@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from hybra.utils import calculate_condition_number, fir_tightener3000, random_filterbank
+from hybra.utils import calculate_condition_number, fir_tightener3000, random_filterbank, kappa_alias
 
 class HybrA(nn.Module):
     def __init__(self, path_to_auditory_filter_config, start_tight:bool=True):
@@ -25,9 +25,10 @@ class HybrA(nn.Module):
 #                     encoder_weight.squeeze(1), self.kernel_size, 1,eps=1.1
 #                 ).unsqueeze(1)
 
-            encoder_weight = fir_tightener3000(encoder_weight, self.kernel_size, eps=1.0001) # dauert ein bissi
-            encoder_weight = torch.cat(self.n_filters*[encoder_weight], dim=0)
-            encoder_weight = encoder_weight[:, :self.kernel_size]
+            encoder_weight = fir_tightener3000(torch.fft.fft(encoder_weight,dim=-1).T, self.kernel_size, eps=1.0001)
+            encoder_weight = torch.fft.ifft(encoder_weight.T, dim=-1)
+            encoder_weight = torch.cat(self.n_filters*[encoder_weight[:, :self.kernel_size]], dim=0)
+ #           encoder_weight = encoder_weight[:, :self.kernel_size]
 
         self.encoder_weight = nn.Parameter(encoder_weight, requires_grad=True)
         self.hybra_filters = torch.empty(self.auditory_filterbank.shape)
