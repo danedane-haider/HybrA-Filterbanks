@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from hybra.utils import calculate_condition_number, fir_tightener3000, random_filterbank, kappa_alias
 
 class HybrA(nn.Module):
-    def __init__(self, path_to_auditory_filter_config, sig_len, fs, start_tight=True):
+    def __init__(self, path_to_auditory_filter_config, start_tight=True):
         super().__init__()
         
         config = torch.load(path_to_auditory_filter_config, weights_only=False, map_location="cpu")
@@ -15,7 +15,6 @@ class HybrA(nn.Module):
         self.auditory_filter_length = self.auditory_filters_real.shape[-1]
         self.n_filters = config['n_filters']
         self.kernel_size = config['kernel_size']
-        self.sig_len = sig_len*fs
         encoder_weight = random_filterbank(N=self.auditory_filter_length, J=1, T=self.kernel_size, norm=True, support_only=False)
         
         self.auditory_filterbank = self.auditory_filters_real.squeeze(1)+ 1j*self.auditory_filters_imag.squeeze(1)
@@ -25,11 +24,13 @@ class HybrA(nn.Module):
 #                     encoder_weight.squeeze(1), self.kernel_size, 1,eps=1.1
 #                 ).unsqueeze(1)
 
-            encoder_weight = fir_tightener3000(encoder_weight, self.kernel_size, eps=1.005)
+            encoder_weight = fir_tightener3000(encoder_weight, self.kernel_size, eps=1.001)
             encoder_weight = torch.cat(self.n_filters*[encoder_weight], dim=0)
 
         self.encoder_weight = nn.Parameter(encoder_weight, requires_grad=True)
         self.hybra_filters = torch.empty(self.auditory_filterbank.shape)
+
+        self.sig_len = 0
 
     def forward(self, x:torch.Tensor) -> torch.Tensor:
         """Forward pass of the HybridFilterbank.
@@ -42,6 +43,8 @@ class HybrA(nn.Module):
         --------
         x (torch.Tensor) - output tensor of shape (batch_size, n_filters, signal_length//hop_length)
         """
+        self.sig_len = x.shape[-1]
+        x = F.pad(x, (0,x.shape[-1]%self.auditory_filters_stride), mode='constant', value=0)
         kernel = torch.fft.ifft(
             torch.fft.fft(self.auditory_filterbank.to(x.device).squeeze(1), dim=1) *
             torch.fft.fft(self.encoder_weight.squeeze(1), dim=1),
@@ -95,11 +98,11 @@ class HybrA(nn.Module):
         --------
         x (torch.Tensor) - output tensor of shape (batch_size, signal_length)
         """
-        
+        sig_len = x_real.shape[-1]*self.auditory_filters_stride
         padding_length = self.hybra_filters.shape[-1] - 1
         kernel_size = self.hybra_filters.real.shape[-1]
         Lin = x_real.shape[-1] + padding_length
-        output_padding_length = int(((self.sig_len)-(kernel_size) 
+        output_padding_length = int(((sig_len)-(kernel_size) 
                                      - (Lin-1)*self.auditory_filters_stride)/-2) 
         x = (
             F.conv_transpose1d(
@@ -115,8 +118,8 @@ class HybrA(nn.Module):
                 padding=output_padding_length
             )
         )
-
-        return torch.roll(2*self.auditory_filters_stride * x.squeeze(1), output_padding_length-(kernel_size-1))
+        
+        return torch.roll(2*self.auditory_filters_stride * x.squeeze(1), output_padding_length-(kernel_size-1))[:,:self.sig_len]
 
     @property
     def condition_number(self):
