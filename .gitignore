@@ -144,3 +144,5 @@ cython_debug/
 
 .HybrA
 .vscode
+
+tighten_cqt_filter.py

@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from hybra.utils import calculate_condition_number, fir_tightener3000, random_filterbank, kappa_alias
 
 class HybrA(nn.Module):
-    def __init__(self, path_to_auditory_filter_config, start_tight=True):
+    def __init__(self, path_to_auditory_filter_config, sig_len, fs, start_tight=True):
         super().__init__()
         
         config = torch.load(path_to_auditory_filter_config, weights_only=False, map_location="cpu")
@@ -15,7 +15,7 @@ class HybrA(nn.Module):
         self.auditory_filter_length = self.auditory_filters_real.shape[-1]
         self.n_filters = config['n_filters']
         self.kernel_size = config['kernel_size']
-
+        self.sig_len = sig_len*fs
         encoder_weight = random_filterbank(N=self.auditory_filter_length, J=1, T=self.kernel_size, norm=True, support_only=False)
         
         self.auditory_filterbank = self.auditory_filters_real.squeeze(1)+ 1j*self.auditory_filters_imag.squeeze(1)
@@ -95,23 +95,28 @@ class HybrA(nn.Module):
         --------
         x (torch.Tensor) - output tensor of shape (batch_size, signal_length)
         """
+        
         padding_length = self.hybra_filters.shape[-1] - 1
+        kernel_size = self.hybra_filters.real.shape[-1]
+        Lin = x_real.shape[-1] + padding_length
+        output_padding_length = int(((self.sig_len)-(kernel_size) 
+                                     - (Lin-1)*self.auditory_filters_stride)/-2) 
         x = (
             F.conv_transpose1d(
                 F.pad(x_real, (0,padding_length), mode='circular'),
                 torch.fliplr(self.hybra_filters.real),
                 stride=self.auditory_filters_stride,
-                padding=padding_length
+                padding=output_padding_length
             )
             + F.conv_transpose1d(
                 F.pad(x_imag, (0,padding_length), mode='circular'),
                 torch.fliplr(self.hybra_filters.imag),
                 stride=self.auditory_filters_stride,
-                padding=padding_length
+                padding=output_padding_length
             )
         )
 
-        return 2*self.auditory_filters_stride * x.squeeze(1)
+        return torch.roll(2*self.auditory_filters_stride * x.squeeze(1), output_padding_length-(kernel_size-1))
 
     @property
     def condition_number(self):
