@@ -31,7 +31,7 @@ def kappa_alias(w:torch.Tensor, D:int, aliasing:bool=True) -> torch.Tensor:
             aliasing: If False, only the condition umber is returned
     Output: Condition number and norm of the aliasing term
     """
-    w_hat = torch.fft.fft(w, dim=-1).T
+    w_hat = torch.fft.fft(w, dim=-1).mT
     kappa = condition_number(w_hat, D)
 
     if aliasing:

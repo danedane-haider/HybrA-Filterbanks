@@ -12,6 +12,6 @@ class HybrALoss(torch.nn.Module):
 
     def forward(self, prediction, target, w):
         loss = self.base_loss(prediction, target)
-        kappa, alias = kappa_alias(w, self.decimation_factor)
+        kappa, alias = kappa_alias(w.squeeze(1), self.decimation_factor)
 
         return loss, loss + self.beta*(kappa-1) + self.gamma * torch.sum(alias)
