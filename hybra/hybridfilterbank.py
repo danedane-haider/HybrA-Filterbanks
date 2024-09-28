@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from hybra.utils import fir_tightener3000, random_filterbank, kappa_alias, condition_number
+from hybra.utils import fir_tightener3000, random_filterbank, kappa_alias
 
 class HybrA(nn.Module):
     def __init__(self, path_to_auditory_filter_config, start_tight=True):
@@ -120,4 +120,4 @@ class HybrA(nn.Module):
 
     @property
     def condition_number(self):
-        return float(kappa_alias(self.hybra.squeeze(1)), self.audlet_stride)
+        return float(kappa_alias(self.hybra.squeeze(1), self.audlet_stride, aliasing=False))

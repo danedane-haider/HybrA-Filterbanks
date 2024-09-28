@@ -13,7 +13,7 @@ def test_reconstruction():
 
     audio =  torch.tensor(audio[:5*fs], dtype=torch.float32)[None,...]
     audio_enc = hybra_fb(audio)
-    audio_dec = hybra_fb.decoder(audio_enc.real, audio_enc.imag)
+    audio_dec = hybra_fb.decoder(audio_enc)
 
     assert torch.allclose(audio[0,...], audio_dec[0,...], atol=0.1)
 
