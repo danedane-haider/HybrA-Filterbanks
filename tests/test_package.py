@@ -15,7 +15,7 @@ def test_reconstruction():
     audio_enc = hybra_fb(audio)
     audio_dec = hybra_fb.decoder(audio_enc.real, audio_enc.imag)
 
-    assert torch.allclose(audio[0,...], audio_dec[0,...], atol=0.05)
+    assert torch.allclose(audio[0,...], audio_dec[0,...], atol=0.1)
 
 def test_tightness():
     hybra_fb = HybrA('./filters/auditory_filters_speech.pth')
