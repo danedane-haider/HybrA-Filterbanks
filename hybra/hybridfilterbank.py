@@ -26,7 +26,8 @@ class HybrA(nn.Module):
             random_kernels = torch.cat(self.audlet_channels * [random_kernels], dim=0)          
 
         self.kernels = nn.Parameter(random_kernels, requires_grad=True)
-        self.hybra_filters = torch.empty(self.audlet.shape)
+        self.filters = torch.empty(self.audlet.shape)
+        self._filters = torch.empty(self.audlet.shape) # this is the one to optimize
 
     def forward(self, x:torch.Tensor) -> torch.Tensor:
         """Forward pass of the HybridFilterbank.
@@ -46,9 +47,10 @@ class HybrA(nn.Module):
             torch.fft.fft(self.kernels.squeeze(1), dim=1),
             dim=1
             ).unsqueeze(1)
-
-        self.hybra_filters = hybra_kernels.clone().detach()
-        padding_length = self.hybra_filters.shape[-1] - 1
+    
+        self._filters = hybra_kernels
+        self.filters = hybra_kernels.clone().detach()
+        padding_length = self.filters.shape[-1] - 1
 
         output_real = F.conv1d(
             F.pad(x.unsqueeze(1), (padding_length, 0), mode='circular'),
@@ -68,15 +70,15 @@ class HybrA(nn.Module):
         """For learning use forward method
 
         """
-        padding_length = self.hybra_filters.shape[-1] - 1
+        padding_length = self.filters.shape[-1] - 1
 
         return F.conv1d(
             F.pad(x.unsqueeze(1), (padding_length, 0), mode='circular'),
-            torch.fliplr(self.hybra_filters.real.to(x.device)),
+            torch.fliplr(self.filters.real.to(x.device)),
             stride = self.audlet_stride,
         ) + 1j * F.conv1d(
             F.pad(x.unsqueeze(1), (padding_length, 0), mode='circular'),
-            torch.fliplr(self.hybra_filters.imag.to(x.device)),
+            torch.fliplr(self.filters.imag.to(x.device)),
             stride = self.audlet_stride,
         )
 
@@ -93,9 +95,9 @@ class HybrA(nn.Module):
         """
 
         padded_signal_length = x.shape[-1] * self.audlet_stride
-        padding_length = self.hybra_filters.shape[-1] - 1
+        padding_length = self.filters.shape[-1] - 1
         Ls = x.shape[-1] + padding_length
-        kernel_size = self.hybra_filters.real.shape[-1]
+        kernel_size = self.filters.real.shape[-1]
         output_padding_length = int((padded_signal_length - kernel_size - (Ls-1) * self.audlet_stride) / -2) 
         
         x_real = x.real
@@ -104,13 +106,13 @@ class HybrA(nn.Module):
         x = (
             F.conv_transpose1d(
                 F.pad(x_real, (0, padding_length), mode='circular'),
-                torch.fliplr(self.hybra_filters.real),
+                torch.fliplr(self.filters.real),
                 stride=self.audlet_stride,
                 padding=output_padding_length
             )
             + F.conv_transpose1d(
                 F.pad(x_imag, (0, padding_length), mode='circular'),
-                torch.fliplr(self.hybra_filters.imag),
+                torch.fliplr(self.filters.imag),
                 stride=self.audlet_stride,
                 padding=output_padding_length
             )
@@ -120,4 +122,4 @@ class HybrA(nn.Module):
 
     @property
     def condition_number(self):
-        return float(kappa_alias(self.hybra_filters.squeeze(1), self.audlet_stride, aliasing=False))
+        return float(kappa_alias(self.filters.squeeze(1), self.audlet_stride, aliasing=False))
