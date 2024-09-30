@@ -29,6 +29,8 @@ jobs:
         run: pipx install hatch
       - name: Test dist
         run: hatch test
+      - name: Build dist
+        run: hatch build
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
