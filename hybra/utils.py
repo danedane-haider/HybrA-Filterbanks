@@ -31,7 +31,7 @@ def kappa_alias(w:torch.Tensor, D:int, aliasing:bool=True) -> torch.Tensor:
             aliasing: If False, only the condition umber is returned
     Output: Condition number and norm of the aliasing term
     """
-    w_hat = torch.fft.fft(w, dim=-1).mT
+    w_hat = torch.fft.fft(w, dim=-1).T
     kappa = condition_number(w_hat, D)
 
     if aliasing:
@@ -61,10 +61,10 @@ def condition_number(w_hat:torch.Tensor, D:int) -> torch.Tensor:
         J = w_hat.shape[1]
         assert N % D == 0, "Oh no! Decimation factor must divide signal length!"
 
-        A = torch.tensor([torch.inf])
-        B = torch.tensor([0])
-        Ha = torch.zeros((D,J))
-        Hb = torch.zeros((D,J))
+        A = torch.tensor([torch.inf]).to(w_hat.device)
+        B = torch.tensor([0]).to(w_hat.device)
+        Ha = torch.zeros((D,J)).to(w_hat.device)
+        Hb = torch.zeros((D,J)).to(w_hat.device)
 
         for j in range(N//D):
             idx_a = (j - np.arange(D) * (N//D)) % N
