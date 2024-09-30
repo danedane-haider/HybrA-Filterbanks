@@ -93,13 +93,13 @@ def can_tight(w:torch.Tensor, D:int) -> torch.Tensor:
         J = w_hat.shape[1]
         assert N % D == 0, "Oh no! Decimation factor must divide signal length!"
 
-        w_hat_tight = torch.zeros(J, N, dtype=w.dtype)
+        w_hat_tight = torch.zeros(J, N, dtype=torch.complex64)
         for j in range(N//D):
             idx = (j - np.arange(D) * (N//D)) % N
             H = w_hat[idx, :]
             U, _, V = torch.linalg.svd(H, full_matrices=False)
             H = U @ V
-            w_hat_tight[:,idx] = H.T
+            w_hat_tight[:,idx] = H.T.to(torch.complex64)
         return torch.fft.ifft(torch.fft.ifft(w_hat_tight.T, dim=1) * D ** 0.5, dim=0).T
 
 def fir_tightener3000(w, supp, D, eps=1.01, Ls=None):

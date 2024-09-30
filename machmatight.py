@@ -13,12 +13,14 @@ T = 512
 aud = smooth_fir(audfreqz, T)
 print(aud.shape)
 
-aud = fir_tightener3000(aud, T, D, 1.0001, Ls=N)
+aud = fir_tightener3000(aud, T, D, 1.01, Ls=2*T)
 
-torch.save({'auditory_filters_real': aud.real.to(dtype=torch.float32),
-            'auditory_filters_imag': aud.imag.to(dtype=torch.float32),
-            'auditory_filters_stride': 128,
-            'n_filters': 256,
-            'kernel_size': 512}, 'filters/audlet.pth')
+# torch.save({'auditory_filters_real': aud.real.to(dtype=torch.float32),
+#             'auditory_filters_imag': aud.imag.to(dtype=torch.float32),
+#             'auditory_filters_stride': 128,
+#             'n_filters': 256,
+#             'kernel_size': 512}, 'filters/audlet.pth')
 
-print(kappa_alias(aud, D=D))
+aud = torch.cat([aud, torch.zeros(J, N-T)], dim=-1)
+
+print(kappa_alias(aud, D=D, aliasing=False))
