@@ -76,24 +76,6 @@ def condition_number(w_hat:torch.Tensor, D:int) -> torch.Tensor:
             B = torch.max(B, torch.max(lam))
         return B/A
 
-def smooth_fir(w_hat:torch.Tensor, supp:int, time_domain:bool=False) -> torch.Tensor:
-    """
-    Takes a filterbank in frequency domain (as columns) and constructs a smoothed FIR version with support length *support*.
-    Input:  w: Frequency responses of the filterbank as 2-D Tensor torch.tensor[length, num_channels]
-            supp: Desired support in time domain
-            time_domain: If True, w is treated as containing impulse responses torch.tensor[num_channels, length]
-    Output: Impulse responses
-    """
-    g = torch.exp(-torch.pi * torch.arange(-supp//2,supp//2)**2 / ((supp-12)/2)**2)
-    g = g.reshape(1,-1)
-    if time_domain:
-        w = w_hat
-    else:
-        w = torch.fft.ifft(w_hat, dim=0).T
-        w = w.roll(supp//2, 0)[:, :supp]
-    return w * g
-
-
 def can_tight(w:torch.Tensor, D:int) -> torch.Tensor:
     """
     Computes the canonical tight filterbank of w (time domain) using the polyphase representation.
@@ -118,7 +100,7 @@ def can_tight(w:torch.Tensor, D:int) -> torch.Tensor:
             U, _, V = torch.linalg.svd(H, full_matrices=False)
             H = U @ V
             w_hat_tight[:,idx] = H.T
-        return torch.fft.ifft(torch.fft.ifft(w_hat_tight.T, dim=1) * torch.sqrt(D), dim=0).T
+        return torch.fft.ifft(torch.fft.ifft(w_hat_tight.T, dim=1) * D ** 0.5, dim=0).T
 
 def fir_tightener3000(w, supp, D, eps=1.01):
     """
@@ -150,3 +132,20 @@ def fir_tightener4000(w, supp, eps=1.01):
         filter = w[i,:].reshape(1,-1)
         w[i,:] = fir_tightener3000(filter, supp, D, eps)
     return w
+
+def smooth_fir(w_hat:torch.Tensor, supp:int, time_domain:bool=False) -> torch.Tensor:
+    """
+    Takes a filterbank in frequency domain (as columns) and constructs a smoothed FIR version with support length *support*.
+    Input:  w: Frequency responses of the filterbank as 2-D Tensor torch.tensor[length, num_channels]
+            supp: Desired support in time domain
+            time_domain: If True, w is treated as containing impulse responses torch.tensor[num_channels, length]
+    Output: Impulse responses
+    """
+    g = torch.exp(-torch.pi * torch.arange(-supp//2,supp//2)**2 / ((supp-12)/2)**2)
+    g = g.reshape(1,-1)
+    if time_domain:
+        w = w_hat
+    else:
+        w = torch.fft.ifft(w_hat, dim=0).T
+        w = w.roll(supp//2, 0)[:, :supp]
+    return w * g
