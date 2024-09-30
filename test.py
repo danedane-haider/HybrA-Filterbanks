@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 audio, fs = soundfile.read('./audio/signal.wav')
 SIGLEN = 5
 sig_len = int(SIGLEN*fs)
-hybra_fb = HybrA('./filters/auditory_filters_speech.pth')
+hybra_fb = HybrA('./filters/audlet.pth')
 
 # make mono
 if len(audio.shape) > 1:
@@ -22,6 +22,11 @@ print(hybra_fb._filters)
 k, a = kappa_alias(hybra_fb.filters.squeeze(), D=hybra_fb.audlet_stride)
 
 print('Kappa:', k, "Aliasing:", a )
+
+plt.figure()
+plt.plot(audio[0].clone().detach())
+plt.plot(audio_dec[0].clone().detach())
+plt.show()
 
 plt.figure()
 plt.plot(audio[0].clone().detach()-audio_dec[0].clone().detach())

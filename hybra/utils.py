@@ -102,15 +102,18 @@ def can_tight(w:torch.Tensor, D:int) -> torch.Tensor:
             w_hat_tight[:,idx] = H.T
         return torch.fft.ifft(torch.fft.ifft(w_hat_tight.T, dim=1) * D ** 0.5, dim=0).T
 
-def fir_tightener3000(w, supp, D, eps=1.01):
+def fir_tightener3000(w, supp, D, eps=1.01, Ls=None):
     """
     Iterative tightening procedure with fixed support for a given filterbank w
     Input:  w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[num_channels, length].
             supp: Desired support of the resulting filterbank
             D: Decimation (or downsampling) factor, must divide filter length!
             eps: Desired condition number
+            Ls: control syste length
     Output: Filterbank with condition number *kappa* and support length *supp*. If length=supp then the resulting filterbank is the canonical tight filterbank of w.
     """
+    if Ls is not None:
+        w =  torch.cat([w, torch.zeros(w.shape[0], Ls-w.shape[1])], dim=1)
     w_tight = w.clone()
     kappa = kappa_alias(w, D, aliasing=False)
     while kappa > eps:
