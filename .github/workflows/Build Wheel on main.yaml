@@ -29,9 +29,8 @@ jobs:
         run: pipx install hatch
       - name: Test dist
         run: hatch test
-      - name: Build dist
-        run: hatch build
-      - uses: actions/upload-artifact@v4
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          name: hybra-2024.0.0-py2.py3-none-any.whl
-          path: ./dist/hybra-2024.0.0-py2.py3-none-any.whl
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          repository-url: https://test.pypi.org/legacy/
