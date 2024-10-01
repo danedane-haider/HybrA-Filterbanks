@@ -22,7 +22,7 @@ class HybrA(nn.Module):
         
         if start_tight:
 #             random_kernels = fir_tightener4000(random_kernels.squeeze(1), self.encoder_length, 1,eps=1.1)
-            random_kernels = fir_tightener3000(random_kernels, self.kernel_length, D=1, eps=1.005)
+            random_kernels = fir_tightener3000(random_kernels, self.kernel_length, D=1, eps=1.01)
             random_kernels = torch.cat(self.audlet_channels * [random_kernels], dim=0)          
 
         self.kernels = nn.Parameter(random_kernels, requires_grad=True)

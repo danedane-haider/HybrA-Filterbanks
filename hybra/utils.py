@@ -121,7 +121,10 @@ def fir_tightener3000(w, supp, D, eps=1.01, Ls=None):
         w_tight[:, supp:] = 0
         kappa = kappa_alias(w_tight, D, aliasing=False)
         print(kappa)
-    return w_tight
+    if Ls is None:
+        return w_tight
+    else:
+        return w_tight[:,:supp]
 
 def fir_tightener4000(w, supp, eps=1.01):
     """

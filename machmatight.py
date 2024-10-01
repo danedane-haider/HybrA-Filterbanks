@@ -14,6 +14,8 @@ aud = smooth_fir(audfreqz, T)
 
 aud = fir_tightener3000(aud, T, D, 1.0025, Ls=2*T)
 
+aud_fir = aud[:, ]
+
 torch.save({'auditory_filters_real': aud.real.to(dtype=torch.float32),
             'auditory_filters_imag': aud.imag.to(dtype=torch.float32),
             'auditory_filters_stride': 128,
@@ -23,3 +25,11 @@ torch.save({'auditory_filters_real': aud.real.to(dtype=torch.float32),
 aud = torch.cat([aud, torch.zeros(J, N-T)], dim=-1)
 
 print(kappa_alias(aud, D=D, aliasing=False))
+
+# config = torch.load('./filters/audlet.pth', weights_only=False, map_location="cpu")
+
+# torch.save({'auditory_filters_real': config['auditory_filters_real'],
+#             'auditory_filters_imag': config['auditory_filters_imag'],
+#             'auditory_filters_stride': 128,
+#             'n_filters': 256,
+#             'kernel_size': 23}, 'filters/audlet.pth')

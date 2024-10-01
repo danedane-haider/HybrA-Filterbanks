@@ -7,17 +7,17 @@ import matplotlib.pyplot as plt
 audio, fs = soundfile.read('./audio/signal.wav')
 SIGLEN = 5
 sig_len = int(SIGLEN*fs)
-hybra_fb = HybrA('./filters/audlet.pth')
+hybra_fb = HybrA('./filters/audlet_0025.pth')
 
 # make mono
 if len(audio.shape) > 1:
     audio = audio[:,0]
 
+print(hybra_fb._filters.shape)
+
 audio =  torch.tensor(audio[:sig_len], dtype=torch.float32)[None,...]
 audio_enc = hybra_fb(audio)
 audio_dec = hybra_fb.decoder(audio_enc)
-
-print(hybra_fb._filters)
 
 k, a = kappa_alias(hybra_fb.filters.squeeze(), D=hybra_fb.audlet_stride)
 
