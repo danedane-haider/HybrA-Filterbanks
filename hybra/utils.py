@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 
 def random_filterbank(N:int, J:int, T:int, norm:bool=True, support_only:bool=False) -> torch.Tensor:
@@ -67,8 +66,8 @@ def condition_number(w_hat:torch.Tensor, D:int) -> torch.Tensor:
         Hb = torch.zeros((D,J)).to(w_hat.device)
 
         for j in range(N//D):
-            idx_a = (j - np.arange(D) * (N//D)) % N
-            idx_b = (np.arange(D) * (N//D) - j) % N
+            idx_a = (j - torch.arange(D) * (N//D)) % N
+            idx_b = (torch.arange(D) * (N//D) - j) % N
             Ha = w_hat[idx_a, :]
             Hb = torch.conj(w_hat[idx_b, :])
             lam = torch.linalg.eigvalsh(Ha @ Ha.H + Hb @ Hb.H).real
@@ -95,7 +94,7 @@ def can_tight(w:torch.Tensor, D:int) -> torch.Tensor:
 
         w_hat_tight = torch.zeros(J, N, dtype=torch.complex64)
         for j in range(N//D):
-            idx = (j - np.arange(D) * (N//D)) % N
+            idx = (j - torch.arange(D) * (N//D)) % N
             H = w_hat[idx, :]
             U, _, V = torch.linalg.svd(H, full_matrices=False)
             H = U @ V
