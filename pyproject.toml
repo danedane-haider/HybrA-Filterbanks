@@ -37,6 +37,7 @@ exclude = [
 [tool.hatch.envs.hatch-test]
 extra-dependencies = [
   "soundfile",
+  "numpy",
 ]
 
 [tool.hatch.version]
