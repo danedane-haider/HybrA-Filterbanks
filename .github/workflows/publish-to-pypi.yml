@@ -23,7 +23,7 @@ jobs:
     - name: Install Hatch
       run: pipx install hatch
     - name: Install soundfile for testing
-      run: pipx install soundfile
+      run: pip install soundfile
     - name: Test dist
       run: hatch test
     - name: Build dist
