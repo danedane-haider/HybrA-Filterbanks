@@ -34,6 +34,11 @@ exclude = [
   "/filters",
 ]
 
+[tool.hatch.envs.hatch-test]
+extra-dependencies = [
+  "soundfile",
+]
+
 [tool.hatch.version]
 [tool.fixit]
 formatter = "ufmt"
