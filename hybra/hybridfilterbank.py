@@ -95,9 +95,9 @@ class HybrA(nn.Module):
         """
 
         padded_signal_length = x.shape[-1] * self.audlet_stride
-        padding_length = self.filters.shape[-1] - 1
+        padding_length = self._filters.shape[-1] - 1
         Ls = x.shape[-1] + padding_length
-        kernel_size = self.filters.real.shape[-1]
+        kernel_size = self._filters.real.shape[-1]
         output_padding_length = int((padded_signal_length - kernel_size - (Ls-1) * self.audlet_stride) / -2) 
         
         x_real = x.real
@@ -106,13 +106,13 @@ class HybrA(nn.Module):
         x = (
             F.conv_transpose1d(
                 F.pad(x_real, (0, padding_length), mode='circular'),
-                torch.fliplr(self.filters.real),
+                torch.fliplr(self._filters.real),
                 stride=self.audlet_stride,
                 padding=output_padding_length
             )
             + F.conv_transpose1d(
                 F.pad(x_imag, (0, padding_length), mode='circular'),
-                torch.fliplr(self.filters.imag),
+                torch.fliplr(self._filters.imag),
                 stride=self.audlet_stride,
                 padding=output_padding_length
             )
