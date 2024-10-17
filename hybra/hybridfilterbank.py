@@ -70,6 +70,8 @@ class HybrA(nn.Module):
         """For learning use forward method
 
         """
+        self.signal_length = x.shape[-1]
+        x = F.pad(x, (0, x.shape[-1] % self.audlet_stride), mode='constant', value=0)
         padding_length = self.filters.shape[-1] - 1
 
         return F.conv1d(
@@ -106,13 +108,13 @@ class HybrA(nn.Module):
         x = (
             F.conv_transpose1d(
                 F.pad(x_real, (0, padding_length), mode='circular'),
-                torch.fliplr(self._filters.real),
+                torch.fliplr(self.filters.real),
                 stride=self.audlet_stride,
                 padding=output_padding_length
             )
             + F.conv_transpose1d(
                 F.pad(x_imag, (0, padding_length), mode='circular'),
-                torch.fliplr(self._filters.imag),
+                torch.fliplr(self.filters.imag),
                 stride=self.audlet_stride,
                 padding=output_padding_length
             )
