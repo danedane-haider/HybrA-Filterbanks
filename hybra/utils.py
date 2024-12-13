@@ -1,156 +1,93 @@
+import numpy as np
 import torch
 
-def random_filterbank(N:int, J:int, T:int, norm:bool=True, support_only:bool=False) -> torch.Tensor:
+def calculate_condition_number(w) -> torch.Tensor:
+    """""
+    Calculate the condition number of a convolution operator via the Littlewood Payley sum.
+    Input: w (torch.tensor) - matrix with filter impulse respones in the columns
+    Output: kappa (torch.tensor) - condition number of the convolution operator
+    """""
+    w_hat: torch.Tensor = torch.sum(torch.abs(torch.fft.fft(w, dim=1)) ** 2, dim=0)
+    B: torch.Tensor = torch.max(w_hat, dim=0).values
+    A: torch.Tensor = torch.min(w_hat, dim=0).values
+    kappa: torch.Tensor = B/A
+    return kappa
+
+def audfilters(n_filters, filter_length, hop_length, frequency_scale, sr):
+    """""
+    Constructs a set of filters *g* that are equidistantly spaced on a perceptual frequency scale (see |freqtoaud|) between 0 and the Nyquist frequency.
+    The filter bandwidths are proportional to the  critical bandwidth of the auditory filters |audfiltbw|.
+    The filters are intended to work with signals with a sampling rate of *fs*.
+    The signal length *Ls* is mandatory, since we need to avoid too narrow frequency windows.
+    """""
+    g = np.zeros((n_filters, filter_length), dtype=np.complex64)
+    return g
+
+def smooth_fir(frequency_responses, support):
+    """""
+    Takes a matrix of frequency responses (as columns) and constructs a smoothed FIR version with support length *support*.
+    """""
+    g = np.exp(-np.pi * np.arange(-support//2,support//2)**2 / ((support-12)/2)**2)
+    supper = g.reshape(1,-1)
+    gi = np.fft.ifft(frequency_responses, axis=0)
+    gi = np.roll(gi, support//2, axis=0)
+    g_re = np.real(gi[:support]).T * supper
+    g_im = np.imag(gi[:support]).T * supper
+    return g_re + 1j * g_im
+
+def tight(w, ver="S"):
     """
-    Constructs a [J, N] tensor with J i.i.d. Gaussian random filters of length N with support T.
-    Input:  N: Signal length
-            J: Number of filters
-            T: Filter support (or length of conv1d kernels). Default: T=N
-            norm: If True then the the variance is 1/(TJ)
-            support_only: If True then N <- T 
-    Output: Impulse responses of the random filterbank (torch.tensor[J, T])
+    Construction of the canonical tight filterbank
+    :param w: analysis filterbank
+    :param ver: version of the tight filterbank: 'S' yields canonical tight filterbank, 'flat_spec' yields tight filterbank with flat spectral response
+    :return: canonical tight filterbank
     """
-    if T == None:
-        T = N
-    if norm:
-        w = torch.randn(J, T).div(torch.sqrt(torch.tensor(J*T)))
+    if ver == "S":
+        w_freqz = np.fft.fft(w, axis=1)
+        lp = np.sum(np.abs(w_freqz) ** 2, axis=0)
+        w_freqz_tight = w_freqz * lp ** (-0.5)
+        w_tight = np.fft.ifft(w_freqz_tight, axis=1)
+    elif ver == "flat_spec":
+        M, N = w.shape
+        w_freqz = np.fft.fft(w, axis=1).T
+        w_tight = np.zeros((M, N), dtype=np.complex64)
+        for k in range(N):
+            H = w_freqz[k, :]
+            U = H / np.linalg.norm(H)
+            w_tight[:, k] = np.conj(U)
+        w_tight = np.fft.ifft(w_tight.T, axis=0).T
     else:
-        w = torch.randn(J, T)
-    if support_only:
-        w_cat = w
+        raise NotImplementedError
+    return w_tight
+
+def frame_bounds_lp(w, freq=False):
+    # if the filters are given already as frequency responses
+    if freq:
+        w_hat = np.sum(np.abs(w) ** 2, axis=1)
     else:
-        w_cat = torch.cat([w, torch.zeros(J, N-T)], dim=1)
-    return w_cat
-    
-def kappa_alias(w:torch.Tensor, D:int, aliasing:bool=True) -> torch.Tensor:
-    """
-    Computes the condition number and the norm of the aliasing term of a filterbank using the polyphase representation.
-    Input:  w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[J, T]
-            D: Decimation (or downsampling) factor, must divide filter length!
-            aliasing: If False, only the condition umber is returned
-    Output: Condition number and norm of the aliasing term
-    """
-    w_hat = torch.fft.fft(w, dim=-1).T
-    kappa = condition_number(w_hat, D)
+        w_hat = np.sum(np.abs(np.fft.fft(w, axis=1)) ** 2, axis=0)
+    B = np.max(w_hat)
+    A = np.min(w_hat)
 
-    if aliasing:
-        alias = torch.zeros_like(w_hat)
-        N = alias.shape[0]
-        for j in range(1,D):
-            alias += w_hat * torch.conj(w_hat.roll(j * N//D, 0))
-        alias = torch.sum(alias, dim=1)
-        return kappa, torch.linalg.norm(alias)
-    else:
-        return kappa
+    return A, B
 
-def condition_number(w_hat:torch.Tensor, D:int) -> torch.Tensor:
+def fir_tightener3000(w, supp, eps=1.1, print_kappa=False):
     """
-    Computes the condition number of a filterbank w_hat using the polyphase representation.
-    Input:  w: Frequency responses of the filterbank as 2-D Tensor torch.tensor[length, num_channels]
-            D: Decimation (or downsampling) factor, must divide filter length!
-    Output: Condition number.
+    Iterative construction of a tight filterbank with a given support
+    :param w: analysis filterbank
+    :param supp: desired support of the tight filterbank
+    :param eps: desired precision for kappa = B/A
+    :return: tight filterbank
     """
-    if D == 1:
-        lp = torch.sum(w_hat.abs() ** 2, dim=1)
-        A = torch.min(lp)
-        B = torch.max(lp)
-        return B/A
-    else:    
-        N = w_hat.shape[0]
-        J = w_hat.shape[1]
-        assert N % D == 0, "Oh no! Decimation factor must divide signal length!"
-
-        A = torch.tensor([torch.inf]).to(w_hat.device)
-        B = torch.tensor([0]).to(w_hat.device)
-        Ha = torch.zeros((D,J)).to(w_hat.device)
-        Hb = torch.zeros((D,J)).to(w_hat.device)
-
-        for j in range(N//D):
-            idx_a = (j - torch.arange(D) * (N//D)) % N
-            idx_b = (torch.arange(D) * (N//D) - j) % N
-            Ha = w_hat[idx_a, :]
-            Hb = torch.conj(w_hat[idx_b, :])
-            lam = torch.linalg.eigvalsh(Ha @ Ha.H + Hb @ Hb.H).real
-            A = torch.min(A, torch.min(lam))
-            B = torch.max(B, torch.max(lam))
-        return B/A
-
-def can_tight(w:torch.Tensor, D:int) -> torch.Tensor:
-    """
-    Computes the canonical tight filterbank of w (time domain) using the polyphase representation.
-    Input:  w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[num_channels, length]
-            D: Decimation (or downsampling) factor, must divide filter length!
-    Output: Canonical tight filterbank of W (torch.tensor[num_channels, length])
-    """
-    w_hat = torch.fft.fft(w.T, dim=0)
-    if D == 1:
-        lp = torch.sum(w_hat.abs() ** 2, dim=1).reshape(-1,1)
-        w_hat_tight = w_hat * (lp ** (-0.5))
-        return torch.fft.ifft(w_hat_tight.T, dim=1)
-    else:
-        N = w_hat.shape[0]
-        J = w_hat.shape[1]
-        assert N % D == 0, "Oh no! Decimation factor must divide signal length!"
-
-        w_hat_tight = torch.zeros(J, N, dtype=torch.complex64)
-        for j in range(N//D):
-            idx = (j - torch.arange(D) * (N//D)) % N
-            H = w_hat[idx, :]
-            U, _, V = torch.linalg.svd(H, full_matrices=False)
-            H = U @ V
-            w_hat_tight[:,idx] = H.T.to(torch.complex64)
-        return torch.fft.ifft(torch.fft.ifft(w_hat_tight.T, dim=1) * D ** 0.5, dim=0).T
-
-def fir_tightener3000(w, supp, D, eps=1.01, Ls=None):
-    """
-    Iterative tightening procedure with fixed support for a given filterbank w
-    Input:  w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[num_channels, length].
-            supp: Desired support of the resulting filterbank
-            D: Decimation (or downsampling) factor, must divide filter length!
-            eps: Desired condition number
-            Ls: control syste length
-    Output: Filterbank with condition number *kappa* and support length *supp*. If length=supp then the resulting filterbank is the canonical tight filterbank of w.
-    """
-    if Ls is not None:
-        w =  torch.cat([w, torch.zeros(w.shape[0], Ls-w.shape[1])], dim=1)
-    w_tight = w.clone()
-    kappa = kappa_alias(w, D, aliasing=False)
-    while kappa > eps:
-        w_tight = can_tight(w_tight, D)
+    A, B = frame_bounds_lp(w)
+    w_tight = w.copy()
+    while B / A > eps:
+        w_tight = tight(w_tight)
         w_tight[:, supp:] = 0
-        kappa = kappa_alias(w_tight, D, aliasing=False)
-    if Ls is None:
-        return w_tight
-    else:
-        return w_tight[:,:supp]
-
-def fir_tightener4000(w, supp, eps=1.01):
-    """
-    Iterative tightening procedure with fixed support for a given filterbank w. Every filter will form an (approximate) tight frame.
-    Input:  w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[num_channels, length].
-            supp: Desired support of the resulting filterbank
-            eps: Desired condition number
-    Output: Filterbank with support length *supp* and every filter has condition number *kappa*.
-    """
-    D=1 # only works without decimation!
-    for i in range(w.shape[0]):
-        filter = w[i,:].reshape(1,-1)
-        w[i,:] = fir_tightener3000(filter, supp, D, eps)
-    return w
-
-def smooth_fir(w_hat:torch.Tensor, supp:int, time_domain:bool=False) -> torch.Tensor:
-    """
-    Takes a filterbank in frequency domain (as columns) and constructs a smoothed FIR version with support length *support*.
-    Input:  w: Frequency responses of the filterbank as 2-D Tensor torch.tensor[length, num_channels]
-            supp: Desired support in time domain
-            time_domain: If True, w is treated as containing impulse responses torch.tensor[num_channels, length]
-    Output: Impulse responses
-    """
-    g = torch.exp(-torch.pi * torch.arange(-supp//2,supp//2)**2 / ((supp-12)/2)**2)
-    g = g.reshape(1,-1)
-    if time_domain:
-        w = w_hat
-    else:
-        w = torch.fft.ifft(w_hat, dim=0).T
-        w = w.roll(supp//2, 0)[:, :supp]
-    return w * g
+        w_tight = np.real(w_tight)
+        A, B = frame_bounds_lp(w_tight)
+        kappa = B / A
+        error = np.linalg.norm(w - w_tight)
+        if print_kappa:
+            print("kappa:", "%.4f" % kappa, ", error:", "%.4f" % error)
+    return w_tight
