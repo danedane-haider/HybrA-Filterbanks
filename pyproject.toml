@@ -46,3 +46,4 @@ extra-dependencies = [
 [tool.hatch.version]
 [tool.fixit]
 formatter = "ufmt"
+
