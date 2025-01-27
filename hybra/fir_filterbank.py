@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from hybra.utils import audfilters_fir 
 
-class Audlet_FIR(nn.Module):
+class AudletFIR(nn.Module):
     def __init__(self, filterbank_config={'fs':16000,
                                           'Ls':16000,
                                           'fmin':0,

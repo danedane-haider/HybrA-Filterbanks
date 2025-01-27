@@ -408,7 +408,21 @@ def audfilters_fir(fs, Ls, fmin=0, fmax=None, spacing=1/2, bwmul=1, filter_len=4
 
     return g, a, M2, fc_new, L, fc, fc_low, fc_high, ind_crit
 
-def response(g, fs, fc_orig, fc_low, fc_high, ind_crit):
+def response(g, fs):
+    """Frequency response of the filters.
+    
+    Args:
+        g (numpy.Array): Filters.
+        fs (int): Sampling rate for plotting Hz.
+    """
+    Lg = g.shape[-1]
+    M = g.shape[0]
+    g_long = np.concatenate([g, np.zeros((M, fs - Lg))], axis=1)
+    G = np.abs(np.fft.fft(g_long, axis=1)[:,:g_long.shape[1]//2])**2
+
+    return G
+
+def plot_response(g, fs, fc_orig, fc_low, fc_high, ind_crit):
     """Frequency response of the filters.
     
     Args:
@@ -419,12 +433,9 @@ def response(g, fs, fc_orig, fc_low, fc_high, ind_crit):
         fc_high (numpy.Array): Center frequencies of the high-pass filters.
         ind_crit (int): Index of the critical filter.
     """
-    Lg = g.shape[-1]
-    M = g.shape[0]
-    g_long = np.concatenate([g, np.zeros((M, fs - Lg))], axis=1)
-    G = np.abs(np.fft.rfft(g_long, axis=1))**2
+    G = response(g, fs)
 
-    f_range = np.linspace(0, fs//2+1, fs//2+1)
+    f_range = np.linspace(0, fs//2, fs//2)
     fig, ax = plt.subplots(3, 1, figsize=(10, 12))
     ax[0].plot(f_range, G.T)
     ax[0].set_title('Frequency responses of the filters')
@@ -443,4 +454,4 @@ def response(g, fs, fc_orig, fc_low, fc_high, ind_crit):
     plt.legend()
 
     plt.show()
-    return G
+
