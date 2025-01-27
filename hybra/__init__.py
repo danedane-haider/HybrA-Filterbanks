@@ -1,3 +1,3 @@
 from .hybridfilterbank import HybrA
-from .fir_filterbank import FIRFilterbank
+from .fir_filterbank import Audlet_FIR
 

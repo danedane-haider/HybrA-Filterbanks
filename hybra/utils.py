@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import matplotlib.pyplot as plt
 
 def calculate_condition_number(w) -> torch.Tensor:
     """""
@@ -12,7 +13,6 @@ def calculate_condition_number(w) -> torch.Tensor:
     A: torch.Tensor = torch.min(w_hat, dim=0).values
     kappa: torch.Tensor = B/A
     return kappa
-
 
 def smooth_fir(frequency_responses, support):
     """""
@@ -129,10 +129,8 @@ def freqtoaud(freq, scale="erb"):
     scale = scale.lower()
     
     if scale == "mel":
+        # MEL scale
         return 1000 / np.log(17 / 7) * np.sign(freq) * np.log(1 + np.abs(freq) / 700)
-
-    elif scale == "mel1000":
-        return 1000 / np.log(2) * np.sign(freq) * np.log(1 + np.abs(freq) / 1000)
 
     elif scale == "erb":
         # Glasberg and Moore's ERB scale
@@ -142,12 +140,6 @@ def freqtoaud(freq, scale="erb"):
         # Bark scale from Traunmuller (1990)
         return np.sign(freq) * ((26.81 / (1 + 1960 / np.abs(freq))) - 0.53)
 
-    elif scale == "erb83":
-        # Moore et al. (1983) ERB scale
-        return 11.17 * np.sign(freq) * (
-            np.log((np.abs(freq) + 312) / (np.abs(freq) + 14675)) -
-            np.log(312 / 14675)
-        )
     elif scale in ["log10", "semitone"]:
         # Logarithmic scale
         return np.log10(freq)
@@ -250,7 +242,7 @@ def firwin(supp, Ls=None, name='hann'):
     else:
         x = np.concatenate([np.linspace(0, 0.5 - 0.5/supp, supp//2), np.linspace(-0.5 + 0.5/supp, -0.5/supp, supp//2)])
     
-    x += supp//2 /supp
+    x += supp//2 / supp
 
     g = 0.5 + 0.5 * np.cos(2 * np.pi * x)
     
@@ -284,7 +276,7 @@ def modulate(g, fc, fs):
 
 def audfilters_fir(fs, Ls, fmin=0, fmax=None, spacing=1/2, bwmul=1, filter_len=480, redmul=1, scale='erb'):
     """
-    Generate FIR filters equidistantly spaced on auditory frequency scales.
+    Generate FIR filter kernel with length *filter_len* equidistantly spaced on auditory frequency scales.
     
     Parameters:
         fs (int): Sampling rate.
@@ -310,26 +302,26 @@ def audfilters_fir(fs, Ls, fmin=0, fmax=None, spacing=1/2, bwmul=1, filter_len=4
     # Center frequencies
     ####################################################################################################
 
-    # Compute center frequencies
+    # min and max center frequencies (agnostic to the LPF)
     fmin = max(fmin, audtofreq(spacing))
     fmax = min(fmax, fs // 2)
 
     # Number of channels
-    M0 = int(np.floor((freqtoaud(fmax)-freqtoaud(fmin)) / spacing))
+    M0 = int(np.floor((freqtoaud(fmax) - freqtoaud(fmin)) / spacing))
 
     # Adjust fmax to match spacing
     fmax = audtofreq(freqtoaud(fmin) + M0 * spacing)
 
     # Ensure fmax < fs/2 and adjust the number of channels
     count = 0
-    while fmax >= fs / 2:
+    while fmax >= fs // 2:
         count += 1
         fmax = audtofreq(freqtoaud(fmin) + (M0 - count) * spacing)
     M0 -= count
 
-    # Center frequencies are given as equidistantly spaced points on auditory scale
+    # Center frequencies as equidistantly spaced points between fmin and fmax
     fc = audspace(fmin, fmax, M0)
-    fc = np.append(fc, fs // 2)  # Add fs//2 as the last frequency
+    fc = np.append(fc, fs // 2)  # Add fs//2 as the frequency for the HPF
     M2 = M0 + 1
 
     ####################################################################################################
@@ -343,10 +335,10 @@ def audfilters_fir(fs, Ls, fmin=0, fmax=None, spacing=1/2, bwmul=1, filter_len=4
     g_probe = firwin(probeLg,probeLs)
     
     # peak normalize
-    gf_probe = np.fft.fft(g_probe)/np.max(np.abs(np.fft.fft(g_probe)))
+    gf_probe = np.fft.fft(g_probe) / np.max(np.abs(np.fft.fft(g_probe)))
 
     # compute ERB-type bandwidth of the prototype
-    winbw = np.linalg.norm(gf_probe)**2*probeLg/probeLs/4
+    winbw = np.linalg.norm(gf_probe)**2 * probeLg / probeLs / 4
 
     ####################################################################################################
     # Frequency support
@@ -381,9 +373,11 @@ def audfilters_fir(fs, Ls, fmin=0, fmax=None, spacing=1/2, bwmul=1, filter_len=4
 
         # Number of bands needed
         LP_num = int(np.floor(fc_crit / LP_step))
+        res = fc_crit - LP_num * LP_step
 
-        # Center frequencies of the low-pass and high-pass filters
+        # Center frequencies of the low-pass filters
         fc_high = fc[ind_crit[-1] + 1:]
+        fc_high[:-1] = fc_high[:-1] - res
         fc_low = np.flip(fc_high[0] - np.arange(1, LP_num + 1) * LP_step)
         fc_new = np.concatenate((fc_low, fc_high))
 
@@ -403,12 +397,48 @@ def audfilters_fir(fs, Ls, fmin=0, fmax=None, spacing=1/2, bwmul=1, filter_len=4
     # Generate filters
     ####################################################################################################
 
-    g = np.zeros((M2, fs), dtype=np.complex128)
+    g = np.zeros((M2, filter_len), dtype=np.complex128)
 
     for m in ind:
-        g[m,:] = np.sqrt(a) * modulate(np.roll(firwin(tsupp[m], fs), (fs-tsupp[m]) // 2), fc_new[m], fs)
+        g[m,:] = np.sqrt(a) * modulate(np.roll(firwin(tsupp[m], filter_len), (filter_len - tsupp[m]) // 2), fc_new[m], fs)
         if m == 1:
             g[m,:] = g[m,:] / np.sqrt(2)
 
     return g, a, M2, fc_new, L, fc, fc_low, fc_high, ind_crit
 
+def response(g, fs, fc_orig, fc_low, fc_high, ind_crit):
+    """Frequency response of the filters.
+    
+    Args:
+        g (numpy.Array): Filters.
+        fs (int): Sampling rate for plotting Hz.
+        fc_orig (numpy.Array): Original center frequencies.
+        fc_low (numpy.Array): Center frequencies of the low-pass filters.
+        fc_high (numpy.Array): Center frequencies of the high-pass filters.
+        ind_crit (int): Index of the critical filter.
+    """
+    Lg = g.shape[-1]
+    M = g.shape[0]
+    g_long = np.concatenate([g, np.zeros((M, fs - Lg))], axis=1)
+    G = np.abs(np.fft.rfft(g_long, axis=1))**2
+
+    f_range = np.linspace(0, fs//2+1, fs//2+1)
+    fig, ax = plt.subplots(3, 1, figsize=(10, 12))
+    ax[0].plot(f_range, G.T)
+    ax[0].set_title('Frequency responses of the filters')
+    ax[0].set_xlabel('Frequency [Hz]')
+    ax[0].set_ylabel('Magnitude')
+
+    ax[1].plot(f_range, np.sum(G, axis=0))
+    ax[1].set_title('Power spectral density')
+    ax[1].set_xlabel('Frequency [Hz]')
+    ax[1].set_ylabel('Magnitude')
+
+    fc_low2 = np.linspace(fc_orig[0], fc_low[-1], len(ind_crit))
+    fc_new2 = np.concatenate((fc_low2, fc_high))
+    ax[2].plot(fc_orig, np.linspace(0, fs // 2, len(fc_orig)), color='black', linewidth=1)
+    ax[2].plot(fc_new2, np.linspace(0, fs // 2, len(fc_new2)), linestyle='--', label='kernel length = ', color='red', linewidth=1)
+    plt.legend()
+
+    plt.show()
+    return G
