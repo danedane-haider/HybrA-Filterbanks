@@ -282,7 +282,7 @@ def modulate(g, fc, fs):
     g_mod = g * np.exp(2*np.pi*1j*fc*np.arange(Lg)/fs)
     return g_mod
 
-def audfilters_fir(fs, Ls, fmin=0, fmax=None, spacing=1/2, bwmul=1, max_supp=480, redmul=1, scale='erb'):
+def audfilters_fir(fs, Ls, fmin=0, fmax=None, spacing=1/2, bwmul=1, filter_len=480, redmul=1, scale='erb'):
     """
     Generate FIR filters equidistantly spaced on auditory frequency scales.
     
@@ -293,7 +293,7 @@ def audfilters_fir(fs, Ls, fmin=0, fmax=None, spacing=1/2, bwmul=1, max_supp=480
         fmax (int): Maximum frequency (Hz).
         spacing (float): Spacing between filters (scale units).
         bwmul (float): Bandwidth multiplier.
-        max_supp (int): Maximum window length (samples).
+        filter_len (int): Maximum window length (samples).
         scale (str): Frequency scale ('erb', 'bark', 'mel', etc.).
     
     Returns:
@@ -370,7 +370,7 @@ def audfilters_fir(fs, Ls, fmin=0, fmax=None, spacing=1/2, bwmul=1, max_supp=480
     tsupp = (np.round(winbw / fsupp[:-1] * fs * 10.64)).astype(int)
 
     # Find all channels that need to be shortened
-    ind_crit = np.where(tsupp[:-1] >= max_supp)[0]
+    ind_crit = np.where(tsupp[:-1] >= filter_len)[0]
 
     if ind_crit.size > 0:
         # Center frequency for the last valid channel
@@ -391,6 +391,10 @@ def audfilters_fir(fs, Ls, fmin=0, fmax=None, spacing=1/2, bwmul=1, max_supp=480
         tsupp_low = np.ones(LP_num) * tsuppmax
         tsupp_high = tsupp[ind_crit[-1] + 1:]
         tsupp = np.concatenate((tsupp_low, tsupp_high)).astype(int)
+    else:
+        fc_new = fc
+        fc_low = None
+        fc_high = None
 
     M2 = len(fc_new)-1
     ind = np.arange(1, M2)
