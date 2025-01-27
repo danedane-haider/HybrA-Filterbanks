@@ -25,11 +25,11 @@ class FIRFilterbank(nn.Module):
     def forward(self, x):
         out_real = F.conv1d(
             F.pad(x.unsqueeze(1), (self.filter_len//2, self.filter_len//2), mode='circular'),
-            self.fir_kernels_real.unsqueeze(1),
+            self.fir_kernels_real.to(x.device).unsqueeze(1),
         )
         out_imag = F.conv1d(
             F.pad(x.unsqueeze(1), (self.filter_len//2, self.filter_len//2), mode='circular'),
-            self.fir_kernels_imag.unsqueeze(1),
+            self.fir_kernels_imag.to(x.device).unsqueeze(1),
         )
 
         return out_real + 1j * out_imag

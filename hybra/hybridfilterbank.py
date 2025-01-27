@@ -1,20 +1,22 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from hybra.utils import calculate_condition_number, fir_tightener3000
+from hybra.utils import calculate_condition_number, fir_tightener3000, audfilters_fir
 
 class HybrA(nn.Module):
-    def __init__(self, path_to_auditory_filter_config, start_tight:bool=True):
+    def __init__(self, filterbank_config={'fs':16000, 'Ls':16000, 'fmin':0, 'fmax':None, 'spacing':1/2, 'bwmul':1, 'filter_len':480, 'redmul':1, 'scale':'erb'}, start_tight:bool=True):
         super().__init__()
+        [filters,a,M,fc,L,fc_orig,fc_low,fc_high,ind_crit]  = audfilters_fir(**filterbank_config)
 
-        config = torch.load(path_to_auditory_filter_config, weights_only=False, map_location="cpu")
+        fir_kernels_real = torch.tensor(filters.real, dtype=torch.float32)
+        fir_kernels_imag = torch.tensor(filters.imag, dtype=torch.float32)
 
-        self.auditory_filters_real = torch.tensor(config['auditory_filters_real'])
-        self.auditory_filters_imag = torch.tensor(config['auditory_filters_imag'])
-        self.auditory_filters_stride = config['auditory_filters_stride']
-        self.auditory_filter_length = self.auditory_filters_real.shape[-1]
-        self.n_filters = config['n_filters']
-        self.kernel_size = config['kernel_size']
+        self.register_buffer('fir_kernels_real', fir_kernels_real)
+        self.register_buffer('fir_kernels_imag', fir_kernels_imag)
+
+        self.n_filters = fir_kernels_real.shape[0]
+        self.fir_filter_len = filterbank_config['filter_len']
+        self.fir_filter_stride = 1 #TODO: do something with that
 
         self.output_real_forward = None
         self.output_imag_forward = None
@@ -46,7 +48,7 @@ class HybrA(nn.Module):
         """
 
         kernel_real = F.conv1d(
-            self.auditory_filters_real.to(x.device).squeeze(1),
+            self.fir_kernels_real.to(x.device).squeeze(1),
             self.encoder_weight_real,
             groups=self.n_filters,
             padding="same",
@@ -54,7 +56,7 @@ class HybrA(nn.Module):
         self.hybra_filters_real = kernel_real.clone().detach()
 
         kernel_imag = F.conv1d(
-            self.auditory_filters_imag.to(x.device).squeeze(1),
+            self.fir_kernels_imag.to(x.device).squeeze(1),
             self.encoder_weight_imag,
             groups=self.n_filters,
             padding="same",
@@ -62,15 +64,15 @@ class HybrA(nn.Module):
         self.hybra_filters_imag = kernel_imag.clone().detach()
         
         output_real = F.conv1d(
-            F.pad(x.unsqueeze(1), (self.auditory_filter_length//2, self.auditory_filter_length//2), mode='circular'),
+            F.pad(x.unsqueeze(1), (self.fir_filter_len//2, self.fir_filter_len//2), mode='circular'),
             kernel_real,
-            stride=self.auditory_filters_stride,
+            stride=self.fir_fitler_stride,
         )
         
         output_imag = F.conv1d(
-            F.pad(x.unsqueeze(1), (self.auditory_filter_length//2,self.auditory_filter_length//2), mode='circular'),
+            F.pad(x.unsqueeze(1), (self.fir_filter_len//2,self.fir_filter_len//2), mode='circular'),
             kernel_imag,
-            stride=self.auditory_filters_stride,
+            stride=self.fir_fitler_stride,
         )
 
         out = output_real + 1j* output_imag
@@ -82,13 +84,13 @@ class HybrA(nn.Module):
 
         """
         out = F.conv1d(
-                    F.pad(x.unsqueeze(1),(self.auditory_filter_length//2, self.auditory_filter_length//2), mode='circular'),
+                    F.pad(x.unsqueeze(1),(self.fir_filter_len//2, self.fir_filter_len//2), mode='circular'),
                     self.hybra_filters_real.to(x.device),
-                    stride=self.auditory_filters_stride,
+                    stride=self.fir_fitler_stride,
                 ) + 1j * F.conv1d(
-                    F.pad(x.unsqueeze(1),(self.auditory_filter_length//2, self.auditory_filter_length//2), mode='circular'),
+                    F.pad(x.unsqueeze(1),(self.fir_filter_len//2, self.fir_filter_len//2), mode='circular'),
                     self.hybra_filters_imag.to(x.device),
-                    stride=self.auditory_filters_stride,
+                    stride=self.fir_fitler_stride,
                 )
                 
         return out
@@ -108,14 +110,14 @@ class HybrA(nn.Module):
             F.conv_transpose1d(
                 x_real,
                 self.hybra_filters_real,
-                stride=self.auditory_filters_stride,
-                padding=self.auditory_filter_length//2,
+                stride=self.fir_fitler_stride,
+                padding=self.fir_filter_len//2,
             )
             + F.conv_transpose1d(
                 x_imag,
                 self.hybra_filters_imag,
-                stride=self.auditory_filters_stride,
-                padding=self.auditory_filter_length//2,
+                stride=self.fir_fitler_stride,
+                padding=self.fir_filter_len//2,
             )
         )
 
