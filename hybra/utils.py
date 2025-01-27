@@ -379,6 +379,7 @@ def audfilters_fir(fs, Ls, fmin=0, fmax=None, spacing=1/2, bwmul=1, filter_len=4
         fc_high = fc[ind_crit[-1] + 1:]
         fc_high[:-1] = fc_high[:-1] - res
         fc_low = np.flip(fc_high[0] - np.arange(1, LP_num + 1) * LP_step)
+        fc_low [0] = 0
         fc_new = np.concatenate((fc_low, fc_high))
 
         tsuppmax = tsupp[ind_crit[-1] + 1]
@@ -400,9 +401,10 @@ def audfilters_fir(fs, Ls, fmin=0, fmax=None, spacing=1/2, bwmul=1, filter_len=4
     g = np.zeros((M2, filter_len), dtype=np.complex128)
 
     for m in ind:
-        g[m,:] = np.sqrt(a) * modulate(np.roll(firwin(tsupp[m], filter_len), (filter_len - tsupp[m]) // 2), fc_new[m], fs)
         if m == 1:
-            g[m,:] = g[m,:] / np.sqrt(2)
+            g[m,:] = np.sqrt(a) * np.roll(firwin(tsupp[m], filter_len), (filter_len - tsupp[m]) // 2) / np.sqrt(2)
+        else:
+            g[m,:] = np.sqrt(a) * modulate(np.roll(firwin(tsupp[m], filter_len), (filter_len - tsupp[m]) // 2), fc_new[m], fs)
 
     return g, a, M2, fc_new, L, fc, fc_low, fc_high, ind_crit
 
