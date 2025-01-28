@@ -379,7 +379,6 @@ def audfilters_fir(fs, Ls, fmin=0, fmax=None, spacing=1/2, bwmul=1, filter_len=4
         fc_high = fc[ind_crit[-1] + 1:]
         fc_high[:-1] = fc_high[:-1] - res
         fc_low = np.flip(fc_high[0] - np.arange(1, LP_num + 1) * LP_step)
-        fc_low [0] = 0
         fc_new = np.concatenate((fc_low, fc_high))
 
         tsuppmax = tsupp[ind_crit[-1] + 1]
@@ -408,11 +407,12 @@ def audfilters_fir(fs, Ls, fmin=0, fmax=None, spacing=1/2, bwmul=1, filter_len=4
 
     return g, a, M2, fc_new, L, fc, fc_low, fc_high, ind_crit
 
-def response(g, fs, fc_orig, fc_low, fc_high, ind_crit):
+def response(g, fs, a, fc_orig, fc_low, fc_high, ind_crit, plot=True):
     """Frequency response of the filters.
     
     Args:
         g (numpy.Array): Filters.
+        a (int): Downsampling rate.
         fs (int): Sampling rate for plotting Hz.
         fc_orig (numpy.Array): Original center frequencies.
         fc_low (numpy.Array): Center frequencies of the low-pass filters.
@@ -423,24 +423,24 @@ def response(g, fs, fc_orig, fc_low, fc_high, ind_crit):
     M = g.shape[0]
     g_long = np.concatenate([g, np.zeros((M, fs - Lg))], axis=1)
     G = np.abs(np.fft.rfft(g_long, axis=1))**2
+    if plot:
+        f_range = np.linspace(0, fs//2+1, fs//2+1)
+        fig, ax = plt.subplots(3, 1, figsize=(10, 12))
+        ax[0].plot(f_range, G.T)
+        ax[0].set_title('Frequency responses of the filters')
+        ax[0].set_xlabel('Frequency [Hz]')
+        ax[0].set_ylabel('Magnitude')
 
-    f_range = np.linspace(0, fs//2+1, fs//2+1)
-    fig, ax = plt.subplots(3, 1, figsize=(10, 12))
-    ax[0].plot(f_range, G.T)
-    ax[0].set_title('Frequency responses of the filters')
-    ax[0].set_xlabel('Frequency [Hz]')
-    ax[0].set_ylabel('Magnitude')
+        ax[1].plot(f_range, np.sum(G, axis=0) / np.sqrt(a))
+        ax[1].set_title('Power spectral density')
+        ax[1].set_xlabel('Frequency [Hz]')
+        ax[1].set_ylabel('Magnitude')
 
-    ax[1].plot(f_range, np.sum(G, axis=0))
-    ax[1].set_title('Power spectral density')
-    ax[1].set_xlabel('Frequency [Hz]')
-    ax[1].set_ylabel('Magnitude')
+        fc_low2 = np.linspace(fc_orig[0], fc_low[-1], len(ind_crit))
+        fc_new2 = np.concatenate((fc_low2, fc_high))
+        ax[2].plot(fc_orig, np.linspace(0, fs // 2, len(fc_orig)), color='black', linewidth=1)
+        ax[2].plot(fc_new2, np.linspace(0, fs // 2, len(fc_new2)), linestyle='--', label='kernel length = ', color='red', linewidth=1)
+        plt.legend()
 
-    fc_low2 = np.linspace(fc_orig[0], fc_low[-1], len(ind_crit))
-    fc_new2 = np.concatenate((fc_low2, fc_high))
-    ax[2].plot(fc_orig, np.linspace(0, fs // 2, len(fc_orig)), color='black', linewidth=1)
-    ax[2].plot(fc_new2, np.linspace(0, fs // 2, len(fc_new2)), linestyle='--', label='kernel length = ', color='red', linewidth=1)
-    plt.legend()
-
-    plt.show()
+        plt.show()
     return G
