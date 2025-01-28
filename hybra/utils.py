@@ -421,7 +421,7 @@ def response(g, fs, a):
 
     return G
 
-def plot_response(g, fs, fc_orig, fc_low, fc_high, ind_crit):
+def plot_response(g, fs, a, fc_orig, fc_low, fc_high, ind_crit):
     """Frequency response of the filters.
     
     Args:
@@ -433,7 +433,7 @@ def plot_response(g, fs, fc_orig, fc_low, fc_high, ind_crit):
         fc_high (numpy.Array): Center frequencies of the high-pass filters.
         ind_crit (int): Index of the critical filter.
     """
-    G = response(g, fs)
+    G = response(g, fs, a)
 
     f_range = np.linspace(0, fs//2, fs//2)
     fig, ax = plt.subplots(3, 1, figsize=(10, 12))
