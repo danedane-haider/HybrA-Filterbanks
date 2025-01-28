@@ -407,7 +407,7 @@ def audfilters_fir(fs, Ls, fmin=0, fmax=None, spacing=1/2, bwmul=1, filter_len=4
 
     return g, a, M2, fc_new, L, fc, fc_low, fc_high, ind_crit
 
-def response(g, fs):
+def response(g, fs, a):
     """Frequency response of the filters.
     
     Args:
@@ -417,7 +417,7 @@ def response(g, fs):
     Lg = g.shape[-1]
     M = g.shape[0]
     g_long = np.concatenate([g, np.zeros((M, fs - Lg))], axis=1)
-    G = np.abs(np.fft.fft(g_long, axis=1)[:,:g_long.shape[1]//2])**2
+    G = np.abs(np.fft.fft(g_long, axis=1)[:,:g_long.shape[1]//2])**2 / np.sqrt(a)
 
     return G
 
