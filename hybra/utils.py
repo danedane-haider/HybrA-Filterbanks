@@ -190,7 +190,7 @@ def audspace(fmin, fmax, n, scale="erb"):
 
     return y
 
-def audfiltbw(fc, scale="erb"):
+def fctobw(fc, scale="erb"):
     """
     Computes the critical bandwidth of the auditory filter at a given center frequency.
 
@@ -211,7 +211,7 @@ def audfiltbw(fc, scale="erb"):
     if not (isinstance(fc, (float, int, np.ndarray)) and np.all(fc >= 0)):
         raise ValueError("fc must be a non-negative scalar or array.")
 
-    # Compute critical bandwidth based on the auditory scale
+    # Compute bandwidth based on the auditory scale
     if scale == "erb":
         bw = 24.7 + fc / 9.265
     elif scale == "bark":
@@ -225,24 +225,60 @@ def audfiltbw(fc, scale="erb"):
 
     return bw
 
-def firwin(supp, Ls=None, name='hann'):
+def bwtofc(bw, scale="erb"):
+    """
+    Computes the center frequency corresponding to a given critical bandwidth.
+
+    Parameters:
+    bw (float or ndarray): Critical bandwidth. Must be non-negative.
+    scale (str): Auditory scale. Supported values are:
+                 - 'erb': Equivalent Rectangular Bandwidth
+                 - 'bark': Bark scale
+                 - 'mel': Mel scale
+                 - 'log10': Logarithmic scale
+                 - 'semitone': Semitone scale
+
+    Returns:
+    ndarray or float: Center frequency corresponding to the given bandwidth.
+    """
+    if isinstance(bw, (list, tuple)):
+        bw = np.array(bw)
+    if not (isinstance(bw, (float, int, np.ndarray)) and np.all(bw >= 0)):
+        raise ValueError("bw must be a non-negative scalar or array.")
+
+    # Compute center frequency based on the auditory scale
+    if scale == "erb":
+        fc = (bw - 24.7) * 9.265
+    elif scale == "bark":
+        fc = np.sqrt(((bw - 25) / 75)**(1 / 0.69) / 1.4e-6)
+    elif scale == "mel":
+        fc = 1000 * (bw / np.log(17 / 7)) - 700
+    elif scale in ["log10", "semitone"]:
+        fc = bw
+    else:
+        raise ValueError(f"Unsupported auditory scale: {scale}")
+
+    return fc
+
+def firwin(window_length, padding_length=None, name='hann'):
     """
     FIR window generation in Python.
     
     Parameters:
-        name (str): Name of the window type.
-        len (int or array-like): Length of the window or a vector for custom sampling points.
+        window_length (int): Length of the window.
+        padding_length (int): Length of the padding.
+        name (str): Name of the window.
         
     Returns:
         g (ndarray): FIR window.
         info (dict): Metadata about the window.
     """
-    if supp % 2 == 0:
-        x = np.concatenate([np.linspace(0, 0.5 - 1/supp, supp//2), np.linspace(-0.5, -1/supp, supp//2)])
+    if window_length % 2 == 0:
+        x = np.concatenate([np.linspace(0, 0.5 - 1/window_length, window_length//2), np.linspace(-0.5, -1/window_length, window_length//2)])
     else:
-        x = np.concatenate([np.linspace(0, 0.5 - 0.5/supp, supp//2), np.linspace(-0.5 + 0.5/supp, -0.5/supp, supp//2)])
+        x = np.concatenate([np.linspace(0, 0.5 - 0.5/window_length, window_length//2), np.linspace(-0.5 + 0.5/window_length, -0.5/window_length, window_length//2)])
     
-    x += supp//2 / supp
+    x += window_length//2 / window_length
 
     g = 0.5 + 0.5 * np.cos(2 * np.pi * x)
     
@@ -250,14 +286,16 @@ def firwin(supp, Ls=None, name='hann'):
     g /= np.sum(np.abs(g))
     #g /= np.max(np.abs(g))
 
-    if Ls is None:
-        if supp % 2 == 0:
+    if padding_length is None:
+        if window_length % 2 == 0:
             return g
         else:
             return np.concatenate([g, np.zeros(1)])
     
-    if Ls > supp:
-        return np.concatenate([g, np.zeros(Ls - len(g))])
+    if padding_length > window_length:
+        g_padded = np.concatenate([g, np.zeros(padding_length - len(g))])
+        g_centered = np.roll(g_padded, len(g)//2)
+        return g_centered
 
 def modulate(g, fc, fs):
     """Modulate a filters.
@@ -274,19 +312,17 @@ def modulate(g, fc, fs):
     g_mod = g * np.exp(2*np.pi*1j*fc*np.arange(Lg)/fs)
     return g_mod
 
-def audfilters_fir(fs, Ls, fmin=0, fmax=None, spacing=1/2, bwmul=1, filter_len=480, redmul=1, scale='erb'):
+def audfilters_fir(filter_length, num_channels, fs, Ls, bwmul=1, scale='erb'):
     """
-    Generate FIR filter kernel with length *filter_len* equidistantly spaced on auditory frequency scales.
+    Generate FIR filter kernel with length *filter_length* equidistantly spaced on auditory frequency scales.
     
     Parameters:
+        filter_length (int): Length of the FIR filter.
+        num_channels (int): Number of channels.
         fs (int): Sampling rate.
         Ls (int): Signal length.
-        fmin (int): Minimum frequency (Hz).
-        fmax (int): Maximum frequency (Hz).
-        spacing (float): Spacing between filters (scale units).
         bwmul (float): Bandwidth multiplier.
-        filter_len (int): Maximum window length (samples).
-        scale (str): Frequency scale ('erb', 'bark', 'mel', etc.).
+        scale (str): Auditory scale.
     
     Returns:
         filters (list of torch.Tensor): Generated filters.
@@ -294,119 +330,75 @@ def audfilters_fir(fs, Ls, fmin=0, fmax=None, spacing=1/2, bwmul=1, filter_len=4
         fc (list): Center frequencies.
         L (int): Admissible signal length.
     """
-    
-    if fmax is None:
-        fmax = fs // 2
 
     ####################################################################################################
-    # Center frequencies
-    ####################################################################################################
-
-    # min and max center frequencies (agnostic to the LPF)
-    fmin = max(fmin, audtofreq(spacing))
-    fmax = min(fmax, fs // 2)
-
-    # Number of channels
-    M0 = int(np.floor((freqtoaud(fmax) - freqtoaud(fmin)) / spacing))
-
-    # Adjust fmax to match spacing
-    fmax = audtofreq(freqtoaud(fmin) + M0 * spacing)
-
-    # Ensure fmax < fs/2 and adjust the number of channels
-    count = 0
-    while fmax >= fs // 2:
-        count += 1
-        fmax = audtofreq(freqtoaud(fmin) + (M0 - count) * spacing)
-    M0 -= count
-
-    # Center frequencies as equidistantly spaced points between fmin and fmax
-    fc = audspace(fmin, fmax, M0)
-    fc = np.append(fc, fs // 2)  # Add fs//2 as the frequency for the HPF
-    M2 = M0 + 1
-
-    ####################################################################################################
-    # Bandwith conversion factor
+    # Bandwidth conversion
     ####################################################################################################
 
     probeLs = 10000
     probeLg = 1000
-
-    # probe prototype window full length
-    g_probe = firwin(probeLg,probeLs)
+    g_probe = firwin(probeLg, probeLs)
     
     # peak normalize
     gf_probe = np.fft.fft(g_probe) / np.max(np.abs(np.fft.fft(g_probe)))
 
     # compute ERB-type bandwidth of the prototype
-    winbw = np.linalg.norm(gf_probe)**2 * probeLg / probeLs / 4
-
+    bw_conversion = np.linalg.norm(gf_probe)**2 * probeLg / probeLs / 2
+    
     ####################################################################################################
-    # Frequency support
-    ####################################################################################################
-
-    # Frequency support measured in Hz
-    fsupp = np.zeros(M2)
-    fsupp[:M2-1] = audfiltbw(fc[:M2-1]) / winbw * bwmul
-
-    # Optimal stride
-    a = np.floor(np.min(fs / fsupp[:M2-1] / redmul)).astype(int)
-
-    # next admissible signal length
-    L = int(np.ceil(Ls / a) * a)
-
-    ####################################################################################################
-    # Time support
+    # Center frequencies
     ####################################################################################################
 
-    # Calculate time supports -- Whats that factor 10.64??
-    tsupp = (np.round(winbw / fsupp[:-1] * fs * 10.64)).astype(int)
+    # get the bandwidth for the maximum admissible filter length and the associated center frequency
+    fsupp_crit = bw_conversion / filter_length * fs
+    fc_crit = bwtofc(fsupp_crit, scale) # in Hz
+    #fc_crit_aud = freqtoaud(fc_crit_hz) # in auditory units
 
-    # Find all channels that need to be shortened
-    ind_crit = np.where(tsupp[:-1] >= filter_len)[0]
+    aud = audspace(0, fs//2, fs//2)
+    intersection = int(np.abs(aud - fc_crit).argmin())
+    hz = np.linspace(0, fs//2, fs//2) * fc_crit / intersection
 
-    if ind_crit.size > 0:
-        # Center frequency for the last valid channel
-        fc_crit = fc[ind_crit[-1] + 1]
+    fc_full = np.maximum(hz, aud)
+    ind = np.linspace(0, len(fc_full) - 1, num_channels, dtype=int)
+    fc = fc_full[ind]
 
-        # Frequency step from the previous to the last valid fc
-        LP_step = fc[ind_crit[-1] + 2] - fc_crit
+    # channels that go to the linear part
+    num_lin = len(fc[fc < fc_crit])
 
-        # Number of bands needed
-        LP_num = int(np.floor(fc_crit / LP_step))
-        res = fc_crit - LP_num * LP_step
+    ####################################################################################################
+    # Frequency and time supports
+    ####################################################################################################
 
-        # Center frequencies of the low-pass filters
-        fc_high = fc[ind_crit[-1] + 1:]
-        fc_high[:-1] = fc_high[:-1] - res
-        fc_low = np.flip(fc_high[0] - np.arange(1, LP_num + 1) * LP_step)
-        fc_new = np.concatenate((fc_low, fc_high))
+    # frequency support for the auditory part
+    fsupp = fctobw(fc[num_lin+1:]) / bw_conversion * bwmul
 
-        tsuppmax = tsupp[ind_crit[-1] + 1]
-        tsupp_low = np.ones(LP_num) * tsuppmax
-        tsupp_high = tsupp[ind_crit[-1] + 1:]
-        tsupp = np.concatenate((tsupp_low, tsupp_high)).astype(int)
-    else:
-        fc_new = fc
-        fc_low = None
-        fc_high = None
+    # time support for the auditory part
+    tsupp = (np.round(bw_conversion / fsupp * fs * 10.64)).astype(int)
 
-    M2 = len(fc_new)
+    # Maximal decimation factor (stride) to get a nice frame and accoring signal length
+    d = np.floor(np.min(fs / fsupp)).astype(int)
+    L = int(np.ceil(Ls / d) * d)
 
     ####################################################################################################
     # Generate filters
     ####################################################################################################
 
-    g = np.zeros((M2, filter_len), dtype=np.complex128)
+    g = np.zeros((num_channels, filter_length), dtype=np.complex128)
 
-    g[0,:] = np.sqrt(a) * np.roll(firwin(tsupp[0], filter_len), (filter_len - tsupp[0]) // 2) / np.sqrt(2)
-    g[-1,:] = np.sqrt(a) * modulate(np.roll(firwin(tsupp[-1], filter_len), (filter_len - tsupp[-1]) // 2), fs // 2, fs) / np.sqrt(2)
+    g[0,:] = np.sqrt(d) * firwin(filter_length) / np.sqrt(2)
+    g[-1,:] = np.sqrt(d) * modulate(firwin(tsupp[-1], filter_length), fs//2, fs) / np.sqrt(2)
 
-    for m in range(1,M2-1):
-        g[m,:] = np.sqrt(a) * modulate(np.roll(firwin(tsupp[m], filter_len), (filter_len - tsupp[m]) // 2), fc_new[m], fs)
+    # linear part
+    for m in range(1,num_lin):
+        g[m,:] = np.sqrt(d) * modulate(firwin(filter_length), fc[m], fs)
+    
+    # auditory part
+    for m in range(num_channels - num_lin - 1):
+        g[m,:] = np.sqrt(d) * modulate(firwin(tsupp[m], filter_length), fc[m], fs)
 
-    return g, a, M2, fc_new, L, fc, fc_low, fc_high, ind_crit
+    return g, d, fc, L
 
-def response(g, fs, a):
+def response(g, fs):
     """Frequency response of the filters.
     
     Args:
@@ -415,13 +407,13 @@ def response(g, fs, a):
         a (int): Downsampling rate.
     """
     Lg = g.shape[-1]
-    M = g.shape[0]
-    g_long = np.concatenate([g, np.zeros((M, fs - Lg))], axis=1)
-    G = np.abs(np.fft.fft(g_long, axis=1)[:,:g_long.shape[1]//2])**2 / np.sqrt(a)
+    num_channels = g.shape[0]
+    g_long = np.concatenate([g, np.zeros((num_channels, fs - Lg))], axis=1)
+    G = np.abs(np.fft.fft(g_long, axis=1))**2
 
     return G
 
-def plot_response(g, fs, a, fc_orig, fc_low, fc_high, ind_crit):
+def plot_response(g, fc, fs):
     """Frequency response of the filters.
     
     Args:
@@ -433,24 +425,29 @@ def plot_response(g, fs, a, fc_orig, fc_low, fc_high, ind_crit):
         fc_high (numpy.Array): Center frequencies of the high-pass filters.
         ind_crit (int): Index of the critical filter.
     """
-    G = response(g, fs, a)
+    G = response(g, fs)
 
-    f_range = np.linspace(0, fs//2, fs//2)
+    f_range = np.linspace(-fs//2, fs//2, fs)
     fig, ax = plt.subplots(3, 1, figsize=(10, 12))
     ax[0].plot(f_range, G.T)
     ax[0].set_title('Frequency responses of the filters')
     ax[0].set_xlabel('Frequency [Hz]')
     ax[0].set_ylabel('Magnitude')
+    ax[0].set_yscale('log')
 
     ax[1].plot(f_range, np.sum(G, axis=0))
     ax[1].set_title('Power spectral density')
     ax[1].set_xlabel('Frequency [Hz]')
     ax[1].set_ylabel('Magnitude')
 
-    fc_low2 = np.linspace(fc_orig[0], fc_low[-1], len(ind_crit))
-    fc_new2 = np.concatenate((fc_low2, fc_high))
-    ax[2].plot(fc_orig, np.linspace(0, fs // 2, len(fc_orig)), color='black', linewidth=1)
-    ax[2].plot(fc_new2, np.linspace(0, fs // 2, len(fc_new2)), linestyle='--', label='kernel length = ', color='red', linewidth=1)
+    f = np.linspace(0, fs // 2, len(fc))
+    ax[2].plot(fc, f, label='center frequencies', color='blue', linewidth=1)
+    ax[2].plot(freqtoaud(f), f, label='auditory scale', color='black', linewidth=1)
+
+    # fc_low2 = np.linspace(fc_orig[0], fc_low[-1], len(ind_crit))
+    # fc_new2 = np.concatenate((fc_low2, fc_high))
+    # ax[2].plot(fc_orig, np.linspace(0, fs // 2, len(fc_orig)), color='black', linewidth=1)
+    # ax[2].plot(fc_new2, np.linspace(0, fs // 2, len(fc_new2)), linestyle='--', label='kernel length = ', color='red', linewidth=1)
     plt.legend()
 
     plt.show()
