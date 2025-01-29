@@ -454,4 +454,3 @@ def plot_response(g, fs, a, fc_orig, fc_low, fc_high, ind_crit):
     plt.legend()
 
     plt.show()
-
