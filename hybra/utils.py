@@ -401,7 +401,7 @@ def audfilters_fir(fs, Ls, fmin=0, fmax=None, spacing=1/2, bwmul=1, filter_len=4
     g[0,:] = np.sqrt(a) * np.roll(firwin(tsupp[0], filter_len), (filter_len - tsupp[0]) // 2) / np.sqrt(2)
     g[-1,:] = np.sqrt(a) * modulate(np.roll(firwin(tsupp[-1], filter_len), (filter_len - tsupp[-1]) // 2), fs // 2, fs) / np.sqrt(2)
 
-    for m in range(M2-1):
+    for m in range(1,M2-1):
         g[m,:] = np.sqrt(a) * modulate(np.roll(firwin(tsupp[m], filter_len), (filter_len - tsupp[m]) // 2), fc_new[m], fs)
 
     return g, a, M2, fc_new, L, fc, fc_low, fc_high, ind_crit
@@ -417,7 +417,7 @@ def response(g, fs, a):
     Lg = g.shape[-1]
     M = g.shape[0]
     g_long = np.concatenate([g, np.zeros((M, fs - Lg))], axis=1)
-    G = np.abs(np.fft.fft(g_long, axis=1)[:,:g_long.shape[1]//2])**2 / np.sqrt(a)
+    G = np.abs(np.fft.rfft(g_long, axis=1)[:,:g_long.shape[1]//2])**2 / np.sqrt(a)
 
     return G
 
