@@ -417,7 +417,7 @@ def response(g, fs, a):
     Lg = g.shape[-1]
     M = g.shape[0]
     g_long = np.concatenate([g, np.zeros((M, fs - Lg))], axis=1)
-    G = np.abs(np.fft.rfft(g_long, axis=1)[:,:g_long.shape[1]//2])**2 / np.sqrt(a)
+    G = np.abs(np.fft.fft(g_long, axis=1)[:,:g_long.shape[1]//2])**2 / np.sqrt(a)
 
     return G
 

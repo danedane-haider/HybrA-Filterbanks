@@ -8,9 +8,9 @@ class AudletFIR(nn.Module):
                                           'Ls':16000,
                                           'fmin':0,
                                           'fmax':None,
-                                          'spacing':1/2,
+                                          'spacing':1,
                                           'bwmul':1,
-                                          'filter_len':480,
+                                          'filter_len':120,
                                           'redmul':1,
                                           'scale':'erb'},
                                           learnable=True):
