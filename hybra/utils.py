@@ -455,7 +455,7 @@ def response(g, fs):
 
     return G
 
-def plot_response(g, fc, fc_crit, fs):
+def plot_response(g, fc_crit, fs):
     """Frequency response of the filters.
     
     Args:

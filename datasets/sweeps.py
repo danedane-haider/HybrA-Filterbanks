@@ -1,27 +1,37 @@
-# import torch
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.signal import chirp
 
-# def sweep(dur=1, fs=8000, f_min, f_max, batch_size):
-#     """
-#     Generate an exponential sine sweep using PyTorch.
-    
-#     Parameters:
-#     - sr: Sample rate (Hz)
-#     - min_freq: Minimum frequency (Hz)
-#     - max_freq: Maximum frequency (Hz)
-#     - duration: Sweep duration (seconds). If None, randomly selected < 1 sec.
-    
-#     Returns:
-#     - Tensor of sweep waveform.
-#     """
-#     time = torch.arange(dur*fs).reshape(1, -1) / fs
-#     fmin = torch.rand(batch_size, 1) * f_min
+import torch
 
-#     duration = torch.rand(1).item() * 0.99 + 0.1  # Random value between 0.1 and 0.99 sec
-#     t = torch.linspace(0, duration, int(fs * duration))  # Time vector
+def random_sweep(dur=2, fs=16000):
+    """
+    Generate an exponential sine sweep using PyTorch.
     
-#     # Compute instantaneous phase
-#     K = t / torch.log(torch.tensor(f_max / f_min))
-#     phase = 2 * torch.pi * f_min * K * (torch.exp(t / K) - 1)
-#     sweep = torch.sin(phase)
+    Parameters:
+    - sr: Sample rate (Hz)
+    - min_freq: Minimum frequency (Hz)
+    - max_freq: Maximum frequency (Hz)
+    - duration: Sweep duration (seconds). If None, randomly selected < 1 sec.
     
-#     return sweep
+    Returns:
+    - Tensor of sweep waveform.
+    """
+
+    length = dur*fs
+
+    fmin = np.random.randint(0, fs//4, (1,))
+    fmax = np.random.randint(fs//4, fs//2, (1,))
+
+    duration = np.abs(np.random.randn(1).item() * 0.9 * dur + 0.1)
+    t = np.linspace(0, duration, int(fs * duration))  # Time vector
+
+    amplitude = np.random.rand(1).item() * 0.4 + 0.1
+    sweep = chirp(t, f0=fmin, f1=fmax, t1=duration, method='log') * amplitude
+
+    temp_length = int(duration * fs)
+    start_pad = np.random.randint(0, length - temp_length, (1,))
+    end_pad = length - temp_length - start_pad
+    sweep = torch.tensor(sweep, dtype=torch.float32)
+
+    return torch.nn.functional.pad(sweep, (start_pad[0], end_pad[0]), value=0)

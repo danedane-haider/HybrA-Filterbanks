@@ -13,7 +13,7 @@ scale = 'erb'
 [g, d, fc, fc_crit, L] = audfilters_fir(filter_length, num_channels, fs, Ls, bwmul)
 
 G = response(g,fs)
-plot_response(g,fc,fc_crit,fs)
+plot_response(g,fc_crit,fs)
 
 plt.plot(np.real(g[0,:]))
 plt.plot(np.imag(g[0,:]))

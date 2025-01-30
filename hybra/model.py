@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from hybra.firfilterbank import AudletFIR
+from hybra import AudletFIR
 
 class NeuroDual(nn.Module):
     def __init__(self, filterbank_config={'fs':16000,
