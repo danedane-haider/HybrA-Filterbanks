@@ -102,7 +102,7 @@ def audtofreq(aud, scale="erb"):
     if scale == "mel":
         return 700 * np.sign(aud) * (np.exp(np.abs(aud) * np.log(17 / 7) / 1000) - 1)
     elif scale == "erb":
-        return (1 / 0.00437) * np.sign(aud) * (np.exp(np.abs(aud) / 9.2645) - 1)
+        return (1 / 0.00437) * (np.exp(aud / 9.2645) - 1)
     elif scale == "bark":
         return np.sign(aud) * 1960 / (26.81 / (np.abs(aud) + 0.53) - 1)
     elif scale in ["log10", "semitone"]:
@@ -189,6 +189,52 @@ def audspace(fmin, fmax, n, scale="erb"):
     y[-1] = fmax
 
     return y
+
+def freqtoaud_mod(freq, fc_crit):
+    """Modified auditory scale function with linear region below fc_crit."""
+    aud_crit = freqtoaud(fc_crit)
+    slope = (freqtoaud(fc_crit * 1.01) - aud_crit) / (fc_crit * 0.01)
+
+    aud = np.zeros_like(freq, dtype=np.float32)
+    linear_part = freq < fc_crit
+    auditory_part = freq >= fc_crit
+
+    aud[linear_part] = slope * (freq[linear_part] - fc_crit) + aud_crit
+    aud[auditory_part] = freqtoaud(freq[auditory_part])
+
+    return aud
+
+def audtofreq_mod(aud, fc_crit):
+    """Inverse of freqtoaud_mod to map auditory scale back to frequency."""
+    aud_crit = freqtoaud(fc_crit)
+    slope = (freqtoaud(fc_crit * 1.01) - aud_crit) / (fc_crit * 0.01)
+
+    freq = np.zeros_like(aud, dtype=np.float32)
+    linear_part = aud < aud_crit
+    auditory_part = aud >= aud_crit
+
+    freq[linear_part] = (aud[linear_part] - aud_crit) / slope + fc_crit
+    freq[auditory_part] = audtofreq(aud[auditory_part])
+
+    return freq
+
+def audspace_mod(fc_crit, fs, M):
+    """Generate M frequency samples that are equidistant in the modified auditory scale."""
+    # Calculate the modified auditory scale values for 0 Hz and fmax
+    aud_start = freqtoaud_mod(np.array([0]), fc_crit)[0]
+    aud_end = freqtoaud_mod(np.array([fs//2]), fc_crit)[0]
+
+    # Generate M equidistant points in the modified auditory scale
+    fc_aud = np.linspace(aud_start, aud_end, M)
+
+    # Convert auditory scale values back to frequency values
+    fc = audtofreq_mod(fc_aud, fc_crit)
+
+    # Set the first value to 0 Hz, and the last value to fmax
+    fc[0] = 0
+    fc[-1] = fs//2
+
+    return fc, fc_aud
 
 def fctobw(fc, scale="erb"):
     """
@@ -292,10 +338,16 @@ def firwin(window_length, padding_length=None, name='hann'):
         else:
             return np.concatenate([g, np.zeros(1)])
     
-    if padding_length > window_length:
+    elif padding_length == window_length:
+        return g
+    
+    elif padding_length > window_length:
         g_padded = np.concatenate([g, np.zeros(padding_length - len(g))])
-        g_centered = np.roll(g_padded, len(g)//2)
+        g_centered = np.roll(g_padded, (padding_length - len(g))//2)
         return g_centered
+    else:
+        raise ValueError("padding_length must be larger than window_length.")
+
 
 def modulate(g, fc, fs):
     """Modulate a filters.
@@ -343,37 +395,32 @@ def audfilters_fir(filter_length, num_channels, fs, Ls, bwmul=1, scale='erb'):
     gf_probe = np.fft.fft(g_probe) / np.max(np.abs(np.fft.fft(g_probe)))
 
     # compute ERB-type bandwidth of the prototype
-    bw_conversion = np.linalg.norm(gf_probe)**2 * probeLg / probeLs / 2
+    bw_conversion = np.linalg.norm(gf_probe)**2 * probeLg / probeLs / 4
+    weird_factor = fs * 10.64
     
     ####################################################################################################
     # Center frequencies
     ####################################################################################################
 
     # get the bandwidth for the maximum admissible filter length and the associated center frequency
-    fsupp_crit = bw_conversion / filter_length * fs
-    fc_crit = bwtofc(fsupp_crit, scale) # in Hz
-    #fc_crit_aud = freqtoaud(fc_crit_hz) # in auditory units
+    fsupp_crit = bw_conversion / filter_length * weird_factor
+    fc_crit = bwtofc(fsupp_crit / bwmul * bw_conversion)
+    fc_crit_aud = audtofreq(fc_crit)
 
-    aud = audspace(0, fs//2, fs//2)
-    intersection = int(np.abs(aud - fc_crit).argmin())
-    hz = np.linspace(0, fs//2, fs//2) * fc_crit / intersection
-
-    fc_full = np.maximum(hz, aud)
-    ind = np.linspace(0, len(fc_full) - 1, num_channels, dtype=int)
-    fc = fc_full[ind]
-
-    # channels that go to the linear part
-    num_lin = len(fc[fc < fc_crit])
+    [fc, fc_aud] = audspace_mod(fc_crit, fs, num_channels)
+    num_lin = np.where(fc < fc_crit)[0].shape[0]
 
     ####################################################################################################
     # Frequency and time supports
     ####################################################################################################
 
     # frequency support for the auditory part
-    fsupp = fctobw(fc[num_lin+1:]) / bw_conversion * bwmul
+    fsupp = fctobw(fc[num_lin:]) / bw_conversion * bwmul
 
     # time support for the auditory part
-    tsupp = (np.round(bw_conversion / fsupp * fs * 10.64)).astype(int)
+    tsupp_lin = (np.ones(num_lin) * filter_length).astype(int)
+    tsupp_aud = (np.round(bw_conversion / fsupp * weird_factor)).astype(int)
+    tsupp = np.concatenate([tsupp_lin, tsupp_aud])
 
     # Maximal decimation factor (stride) to get a nice frame and accoring signal length
     d = np.floor(np.min(fs / fsupp)).astype(int)
@@ -385,18 +432,13 @@ def audfilters_fir(filter_length, num_channels, fs, Ls, bwmul=1, scale='erb'):
 
     g = np.zeros((num_channels, filter_length), dtype=np.complex128)
 
-    g[0,:] = np.sqrt(d) * firwin(filter_length) / np.sqrt(2)
-    g[-1,:] = np.sqrt(d) * modulate(firwin(tsupp[-1], filter_length), fs//2, fs) / np.sqrt(2)
+    g[0,:] = np.sqrt(d) * firwin(filter_length) #/ np.sqrt(2)
+    g[-1,:] = np.sqrt(d) * modulate(firwin(tsupp[-1], filter_length), fs//2, fs) #/ np.sqrt(2)
 
-    # linear part
-    for m in range(1,num_lin):
-        g[m,:] = np.sqrt(d) * modulate(firwin(filter_length), fc[m], fs)
-    
-    # auditory part
-    for m in range(num_channels - num_lin - 1):
+    for m in range(1, num_channels - 1):
         g[m,:] = np.sqrt(d) * modulate(firwin(tsupp[m], filter_length), fc[m], fs)
 
-    return g, d, fc, L
+    return g, d, fc, fc_crit, L
 
 def response(g, fs):
     """Frequency response of the filters.
@@ -409,11 +451,11 @@ def response(g, fs):
     Lg = g.shape[-1]
     num_channels = g.shape[0]
     g_long = np.concatenate([g, np.zeros((num_channels, fs - Lg))], axis=1)
-    G = np.abs(np.fft.fft(g_long, axis=1))**2
+    G = np.abs(np.fft.fft(g_long, axis=1)[:,:fs//2])**2
 
     return G
 
-def plot_response(g, fc, fs):
+def plot_response(g, fc, fc_crit, fs):
     """Frequency response of the filters.
     
     Args:
@@ -427,27 +469,28 @@ def plot_response(g, fc, fs):
     """
     G = response(g, fs)
 
-    f_range = np.linspace(-fs//2, fs//2, fs)
+    f_range = np.linspace(0, fs//2, fs//2)
     fig, ax = plt.subplots(3, 1, figsize=(10, 12))
     ax[0].plot(f_range, G.T)
     ax[0].set_title('Frequency responses of the filters')
     ax[0].set_xlabel('Frequency [Hz]')
     ax[0].set_ylabel('Magnitude')
-    ax[0].set_yscale('log')
+    #ax[0].set_yscale('log')
 
     ax[1].plot(f_range, np.sum(G, axis=0))
     ax[1].set_title('Power spectral density')
     ax[1].set_xlabel('Frequency [Hz]')
     ax[1].set_ylabel('Magnitude')
 
-    f = np.linspace(0, fs // 2, len(fc))
-    ax[2].plot(fc, f, label='center frequencies', color='blue', linewidth=1)
-    ax[2].plot(freqtoaud(f), f, label='auditory scale', color='black', linewidth=1)
+    num_channels = G.shape[0]
+    freq_samples, aud_samples = audspace_mod(fc_crit, fs, num_channels)
+    freqs = np.linspace(0, fs//2, fs//2)
 
-    # fc_low2 = np.linspace(fc_orig[0], fc_low[-1], len(ind_crit))
-    # fc_new2 = np.concatenate((fc_low2, fc_high))
-    # ax[2].plot(fc_orig, np.linspace(0, fs // 2, len(fc_orig)), color='black', linewidth=1)
-    # ax[2].plot(fc_new2, np.linspace(0, fs // 2, len(fc_new2)), linestyle='--', label='kernel length = ', color='red', linewidth=1)
-    plt.legend()
+    ax[2].scatter(freq_samples, freqtoaud_mod(freq_samples, fc_crit), color="black", label="Center frequencies", linewidths = 0.05)
+    ax[2].plot(freqs, freqtoaud_mod(freqs, fc_crit), color='black', label="Modified Auditory Scale")
+    ax[2].axvline(fc_crit, color='orange', linestyle='--', label="Critical center frequency", alpha=0.5)
+    ax[2].set_xlabel("Frequency (Hz)")
+    ax[2].set_ylabel("Modified Auditory Scale")
+    ax[2].legend()
 
     plt.show()
