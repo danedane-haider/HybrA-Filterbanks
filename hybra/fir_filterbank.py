@@ -8,15 +8,16 @@ class AudletFIR(nn.Module):
     def __init__(self, filterbank_config={'filter_len':120,
                                           'num_channels':64,
                                           'fs':16000,
-                                          'bwmul':1,
-                                          'scale':'erb',},
+                                          'Ls':16000,
+                                          'bwmul':1},
                                           learnable=True):
         super().__init__()
 
         [filters, d, fc, fc_crit, L] = audfilters_fir(**filterbank_config)
 
-        self.filter_len = filterbank_config['filter_len'] 
+        self.filters = filters
         self.stride = d
+        self.filter_len = filterbank_config['filter_len'] 
         self.fs = filterbank_config['fs']
         self.fc = fc
         self.fc_crit = fc_crit

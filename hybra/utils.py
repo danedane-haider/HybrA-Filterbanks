@@ -364,12 +364,19 @@ def modulate(g, fc, fs):
     g_mod = g * np.exp(2*np.pi*1j*fc*np.arange(Lg)/fs)
     return g_mod
 
-def audfilters_fir(filter_length, num_channels, fs, Ls, bwmul=1, scale='erb'):
+
+####################################################################################################
+########################################## the #####################################################
+################################## filterbank generator ############################################
+####################################################################################################
+
+
+def audfilters_fir(filter_len, num_channels, fs, Ls, bwmul=1, scale='erb'):
     """
-    Generate FIR filter kernel with length *filter_length* equidistantly spaced on auditory frequency scales.
+    Generate FIR filter kernel with length *filter_len* equidistantly spaced on auditory frequency scales.
     
     Parameters:
-        filter_length (int): Length of the FIR filter.
+        filter_len (int): Length of the FIR filter.
         num_channels (int): Number of channels.
         fs (int): Sampling rate.
         Ls (int): Signal length.
@@ -403,7 +410,7 @@ def audfilters_fir(filter_length, num_channels, fs, Ls, bwmul=1, scale='erb'):
     ####################################################################################################
 
     # get the bandwidth for the maximum admissible filter length and the associated center frequency
-    fsupp_crit = bw_conversion / filter_length * weird_factor
+    fsupp_crit = bw_conversion / filter_len * weird_factor
     fc_crit = bwtofc(fsupp_crit / bwmul * bw_conversion)
     fc_crit_aud = audtofreq(fc_crit)
 
@@ -418,7 +425,7 @@ def audfilters_fir(filter_length, num_channels, fs, Ls, bwmul=1, scale='erb'):
     fsupp = fctobw(fc[num_lin:]) / bw_conversion * bwmul
 
     # time support for the auditory part
-    tsupp_lin = (np.ones(num_lin) * filter_length).astype(int)
+    tsupp_lin = (np.ones(num_lin) * filter_len).astype(int)
     tsupp_aud = (np.round(bw_conversion / fsupp * weird_factor)).astype(int)
     tsupp = np.concatenate([tsupp_lin, tsupp_aud])
 
@@ -430,15 +437,20 @@ def audfilters_fir(filter_length, num_channels, fs, Ls, bwmul=1, scale='erb'):
     # Generate filters
     ####################################################################################################
 
-    g = np.zeros((num_channels, filter_length), dtype=np.complex128)
+    g = np.zeros((num_channels, filter_len), dtype=np.complex128)
 
-    g[0,:] = np.sqrt(d) * firwin(filter_length) #/ np.sqrt(2)
-    g[-1,:] = np.sqrt(d) * modulate(firwin(tsupp[-1], filter_length), fs//2, fs) #/ np.sqrt(2)
+    g[0,:] = np.sqrt(d) * firwin(filter_len) #/ np.sqrt(2)
+    g[-1,:] = np.sqrt(d) * modulate(firwin(tsupp[-1], filter_len), fs//2, fs) #/ np.sqrt(2)
 
     for m in range(1, num_channels - 1):
-        g[m,:] = np.sqrt(d) * modulate(firwin(tsupp[m], filter_length), fc[m], fs)
+        g[m,:] = np.sqrt(d) * modulate(firwin(tsupp[m], filter_len), fc[m], fs)
 
     return g, d, fc, fc_crit, L
+
+####################################################################################################
+####################################################################################################
+####################################################################################################
+####################################################################################################
 
 def response(g, fs):
     """Frequency response of the filters.

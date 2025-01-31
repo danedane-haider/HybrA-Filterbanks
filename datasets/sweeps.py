@@ -20,18 +20,18 @@ def random_sweep(dur=2, fs=16000):
 
     length = dur*fs
 
-    fmin = np.random.randint(0, fs//4, (1,))
+    fmin = np.random.randint(1, fs//4, (1,))
     fmax = np.random.randint(fs//4, fs//2, (1,))
 
-    duration = np.abs(np.random.randn(1).item() * 0.9 * dur + 0.1)
-    t = np.linspace(0, duration, int(fs * duration))  # Time vector
+    #duration = np.abs(np.random.randn(1).item() * 0.9 * dur + 0.3)
+    duration = (np.random.randint(length//10, length, (1,)))[0]
+    t = np.linspace(0, duration/fs, duration)  # Time vector
 
     amplitude = np.random.rand(1).item() * 0.4 + 0.1
-    sweep = chirp(t, f0=fmin, f1=fmax, t1=duration, method='log') * amplitude
+    sweep = chirp(t, f0=fmin, f1=fmax, t1=duration/fs, method='log') * amplitude
 
-    temp_length = int(duration * fs)
-    start_pad = np.random.randint(0, length - temp_length, (1,))
-    end_pad = length - temp_length - start_pad
+    start_pad = np.random.randint(0, length-duration, (1,))
+    end_pad = length - duration - start_pad
     sweep = torch.tensor(sweep, dtype=torch.float32)
 
     return torch.nn.functional.pad(sweep, (start_pad[0], end_pad[0]), value=0)
