@@ -35,3 +35,21 @@ def random_sweep(dur=2, fs=16000):
     sweep = torch.tensor(sweep, dtype=torch.float32)
 
     return torch.nn.functional.pad(sweep, (start_pad[0], end_pad[0]), value=0)
+
+
+def noise_uniform(dur=2, fs=16000):
+    # Generate uniform magnitudes
+    N = dur * fs
+    X = torch.rand(N // 2 + 1) * 2 - 1  # Uniform in [-1, 1]
+    
+    # Ensure Hermitian symmetry
+    X_full = torch.zeros(N, dtype=torch.cfloat)
+    X_full[0:N//2+1] = X
+    X_full[N//2+1:] = torch.conj(X[1:N//2].flip(0))  # Mirror for real output
+    
+    # Compute inverse FFT
+    x = torch.fft.ifft(X_full).real  # Ensure real output
+    # normalize to [-1, 1]
+    x = x / torch.max(torch.abs(x))
+    
+    return x

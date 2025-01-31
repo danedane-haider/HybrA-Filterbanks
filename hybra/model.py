@@ -14,37 +14,32 @@ class NeuroDual(nn.Module):
         super().__init__()
 
         self.audlet_fir = AudletFIR(filterbank_config=filterbank_config, learnable=False)
-
-        self.kernels_real = self.audlet_fir.kernels_real
-        self.kernels_imag = self.audlet_fir.kernels_imag
         self.stride = self.audlet_fir.stride
         self.filter_len = filterbank_config['filter_len']
         self.num_channels = filterbank_config['num_channels']
 
-        #self.linear_real = nn.Linear(self.num_channels, 1, bias=False)
+        kernel_real = torch.nn.functional.pad(torch.tensor(self.audlet_fir.filters.real, dtype=torch.float32), (0, 0))
+        kernel_imag = torch.nn.functional.pad(torch.tensor(self.audlet_fir.filters.imag, dtype=torch.float32), (0, 0))
         
-        self.conv_real = nn.ConvTranspose1d(in_channels=1,
-                                            out_channels=64,
-                                            kernel_size=self.filter_len,
-                                            stride=self.stride,
-                                            padding=self.filter_len//2,
-                                            bias=False,
-                                            padding_mode='circular')
-        
-        self.conv_real.weight.data = self.kernels_real.unsqueeze(1).unsqueeze(1)
-        
-        self.conv_real = nn.ConvTranspose1d(in_channels=1,
-                                            out_channels=64,
-                                            kernel_size=self.filter_len,
-                                            stride=self.stride,
-                                            padding=self.filter_len//2,
-                                            bias=False,
-                                            padding_mode='circular')
-        
-        self.conv_real.weight.data = self.kernels_imag.unsqueeze(1).unsqueeze(1)
+        self.register_parameter('kernels_real', nn.Parameter(kernel_real, requires_grad=True))
+        self.register_parameter('kernels_imag', nn.Parameter(kernel_imag, requires_grad=True))
 
     def forward(self, x):
         x = self.audlet_fir(x)
-        x_real = self.conv_real(x.real.unsqueeze(1))
 
-        return x.squeeze(0)
+        x = F.conv_transpose1d(
+            x.real,
+            self.kernels_real.to(x.real.device).unsqueeze(1),
+            stride=self.stride,
+            padding=self.filter_len//2,
+            output_padding=self.stride-4
+            ) + \
+                F.conv_transpose1d(
+                x.imag,
+                self.kernels_imag.to(x.imag.device).unsqueeze(1),
+                stride=self.stride,
+                padding=self.filter_len//2,
+                output_padding=self.stride-4
+            )
+
+        return x

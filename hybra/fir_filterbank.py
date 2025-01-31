@@ -69,4 +69,4 @@ class AudletFIR(nn.Module):
         return x.squeeze(1)
 
     def plot_response(self):
-        plot_response_((self.kernels_real + 1j*self.kernels_imag).detach().numpy(), self.fc_crit, self.fs)
+        plot_response_(g=(self.kernels_real + 1j*self.kernels_imag).detach().numpy(), fs=self.fs, scale=True, fc_crit=self.fc_crit)
