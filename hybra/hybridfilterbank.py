@@ -4,20 +4,30 @@ import torch.nn.functional as F
 from hybra.utils import calculate_condition_number, fir_tightener3000, audfilters_fir
 
 class HybrA(nn.Module):
-    def __init__(self, filterbank_config={'fs':16000, 'Ls':16000, 'fmin':0, 'fmax':None, 'spacing':1/2, 'bwmul':1, 'filter_len':480, 'redmul':1, 'scale':'erb'}, start_tight:bool=True):
+    def __init__(self, filterbank_config={'filter_len':120,
+                                          'num_channels':64,
+                                          'fs':16000,
+                                          'Ls':16000,
+                                          'bwmul':1},
+                 start_tight:bool=True):
+        
         super().__init__()
-        [filters,a,M,fc,L,fc_orig,fc_low,fc_high,ind_crit]  = audfilters_fir(**filterbank_config)
+
+        [filters, d, fc, fc_crit, L] = audfilters_fir(**filterbank_config)
+
+        self.filters = filters
+        self.fir_filter_stride = d
+        self.filter_len = filterbank_config['filter_len'] 
+        self.fs = filterbank_config['fs']
+        self.fc = fc
+        self.fc_crit = fc_crit
+        self.n_filters = filters.shape[0]
 
         fir_kernels_real = torch.tensor(filters.real, dtype=torch.float32)
         fir_kernels_imag = torch.tensor(filters.imag, dtype=torch.float32)
 
         self.register_buffer('fir_kernels_real', fir_kernels_real)
         self.register_buffer('fir_kernels_imag', fir_kernels_imag)
-
-        self.n_filters = fir_kernels_real.shape[0]
-        self.fir_filter_len = filterbank_config['filter_len']
-        self.fir_filter_stride = 1 #TODO: do something with that
-
         self.output_real_forward = None
         self.output_imag_forward = None
 
