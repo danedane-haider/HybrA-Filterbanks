@@ -7,9 +7,10 @@ name = "hybra"
 version = "2024.12.1"
 requires-python = ">= 3.10"
 dependencies = [
-  "matplotlib>=3.10.0",
-  "numpy>=2.2.2",
+  "matplotlib",
+  "numpy",
   "torch",
+  "scipy",
 ]
 authors = [
   {name = "The hybra project maintainers"},
@@ -40,7 +41,6 @@ exclude = [
 [tool.hatch.envs.hatch-test]
 extra-dependencies = [
   "soundfile",
-  "numpy",
 ]
 
 [tool.hatch.version]
