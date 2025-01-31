@@ -6,18 +6,14 @@ import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 import soundfile
+import torch.optim as optim
 
 from hybra import AudletFIR
 from hybra import NeuroDual
 from hybra import plot_response
-
 from datasets import random_sweep, noise_uniform
-
-import torch.optim as optim
 from loss.losses import MSETight
 
-# plt.imshow(np.abs(output.squeeze().detach().numpy()), aspect='auto', origin='lower')
-# plt.show()
 
 model = NeuroDual(filterbank_config={'filter_len':128,
                                      'num_channels':64,
@@ -66,7 +62,6 @@ for i in range(500):
     w_imag = model.kernels_imag.squeeze()
 
     loss, loss_tight, kappa = criterion(output, target, w_real + 1j*w_imag)
-    #loss = criterion(output, target)
     loss_tight.backward()
     optimizer.step()
     losses.append(loss.item())

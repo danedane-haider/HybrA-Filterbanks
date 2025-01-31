@@ -23,7 +23,6 @@ def random_sweep(dur=2, fs=16000):
     fmin = np.random.randint(1, fs//4, (1,))
     fmax = np.random.randint(fs//4, fs//2, (1,))
 
-    #duration = np.abs(np.random.randn(1).item() * 0.9 * dur + 0.3)
     duration = (np.random.randint(length//10, length, (1,)))[0]
     t = np.linspace(0, duration/fs, duration)  # Time vector
 
@@ -40,7 +39,7 @@ def random_sweep(dur=2, fs=16000):
 def noise_uniform(dur=2, fs=16000):
     # Generate uniform magnitudes
     N = dur * fs
-    X = torch.rand(N // 2 + 1) * 2 - 1  # Uniform in [-1, 1]
+    X = torch.rand(N // 2 + 1) * 2 - 1
     
     # Ensure Hermitian symmetry
     X_full = torch.zeros(N, dtype=torch.cfloat)
@@ -49,7 +48,6 @@ def noise_uniform(dur=2, fs=16000):
     
     # Compute inverse FFT
     x = torch.fft.ifft(X_full).real  # Ensure real output
-    # normalize to [-1, 1]
     x = x / torch.max(torch.abs(x))
     
     return x

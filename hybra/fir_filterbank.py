@@ -40,33 +40,33 @@ class AudletFIR(nn.Module):
 
         return out_real + 1j * out_imag
 
-    def decoder(self, x_real:torch.Tensor, x_imag:torch.Tensor) -> torch.Tensor:
-        """Forward pass of the dual HybridFilterbank.
+    # def decoder(self, x_real:torch.Tensor, x_imag:torch.Tensor) -> torch.Tensor:
+    #     """Forward pass of the dual HybridFilterbank.
 
-        Parameters:
-        -----------
-        x (torch.Tensor) - input tensor of shape (batch_size, n_filters, signal_length//hop_length)
+    #     Parameters:
+    #     -----------
+    #     x (torch.Tensor) - input tensor of shape (batch_size, n_filters, signal_length//hop_length)
 
-        Returns:
-        --------
-        x (torch.Tensor) - output tensor of shape (batch_size, signal_length)
-        """
-        x = (
-            F.conv_transpose1d(
-                x_real,
-                self.kernels_real.to(x_real.device).unsqueeze(1),
-                stride=self.stride,
-                padding=self.filter_len//2,
-            )
-            + F.conv_transpose1d(
-                x_imag,
-                self.kernels_imag.to(x_imag.device).unsqueeze(1),
-                stride=self.stride,
-                padding=self.filter_len//2,
-            )
-        )
+    #     Returns:
+    #     --------
+    #     x (torch.Tensor) - output tensor of shape (batch_size, signal_length)
+    #     """
+    #     x = (
+    #         F.conv_transpose1d(
+    #             x_real,
+    #             self.kernels_real.to(x_real.device).unsqueeze(1),
+    #             stride=self.stride,
+    #             padding=self.filter_len//2,
+    #         )
+    #         + F.conv_transpose1d(
+    #             x_imag,
+    #             self.kernels_imag.to(x_imag.device).unsqueeze(1),
+    #             stride=self.stride,
+    #             padding=self.filter_len//2,
+    #         )
+    #     )
 
-        return x.squeeze(1)
+    #     return x.squeeze(1)
 
     def plot_response(self):
         plot_response_(g=(self.kernels_real + 1j*self.kernels_imag).detach().numpy(), fs=self.fs, scale=True, fc_crit=self.fc_crit)

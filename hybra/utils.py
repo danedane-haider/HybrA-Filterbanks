@@ -462,7 +462,7 @@ def response(g, fs):
     """
     Lg = g.shape[-1]
     num_channels = g.shape[0]
-    g_long = np.concatenate([g, np.zeros((num_channels, fs - Lg))], axis=1)
+    g_long = np.concatenate([g, np.zeros((num_channels, int(fs) - Lg))], axis=1)
     G = np.abs(np.fft.fft(g_long, axis=1)[:,:fs//2])**2
 
     return G
@@ -504,7 +504,6 @@ def plot_response(g, fs, scale=False, fc_crit=None):
     ax[0].set_title('Frequency responses of the filters')
     ax[0].set_xlabel('Frequency [Hz]')
     ax[0].set_ylabel('Magnitude')
-    #ax[0].set_yscale('log')
 
     psd = np.sum(g_hat, axis=0)
 
