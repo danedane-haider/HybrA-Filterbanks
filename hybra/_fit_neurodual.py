@@ -55,22 +55,33 @@ class NeuroDual(nn.Module):
 		self.register_parameter('kernels_decoder_imag', nn.Parameter(torch.tensor(filters.imag, dtype=torch.float32), requires_grad=True))
 
 	def forward(self, x):
-		# x = F.pad(x.unsqueeze(1), (self.filter_len//2, self.filter_len//2), mode='circular')
-		x = x.unsqueeze(1)
-
+		L_out = x.shape[-1]
+		
+		x = F.pad(x.unsqueeze(1), (self.filter_len//2, self.filter_len//2), mode='circular')
 		x_real = F.conv1d(x, self.kernels_real.to(x.device).unsqueeze(1), stride=self.stride)
 		x_imag = F.conv1d(x, self.kernels_imag.to(x.device).unsqueeze(1), stride=self.stride)
+		
+		L_in = x_real.shape[-1]
+		kernel_size = self.kernels_decoder_real.shape[-1]
+		padding = self.filter_len // 2
+
+
+		# L_out = (L_in -1) * stride - 2 * padding + dialation * (kernel_size - 1) + output_padding + 1 ; dialation = 1
+		# output_padding = L_out - (L_in -1)*stride + 2*padding - kernel_size
+		output_padding=L_out - (L_in -1)*self.stride + 2*padding - kernel_size
 
 		x = F.conv_transpose1d(
 			x_real,
 			self.kernels_decoder_real.unsqueeze(1),
 			stride=self.stride,
-			output_padding=x.shape[-1] - (x_real.shape[-1]-1)*self.stride - self.kernels_decoder_real.shape[-1]
+			padding=padding,
+			output_padding=output_padding
 			) + F.conv_transpose1d(
 				x_imag,
 				self.kernels_decoder_imag.unsqueeze(1),
 				stride=self.stride,
-				output_padding=x.shape[-1] - (x_real.shape[-1]-1)*self.stride - self.kernels_decoder_real.shape[-1]
+				padding=padding,
+				output_padding=output_padding
 			)
 		
 		return x
