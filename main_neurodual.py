@@ -12,7 +12,7 @@ from hybra import AudletFIR
 from hybra import NeuroDual
 from hybra import plot_response
 from datasets import random_sweep, noise_uniform
-from loss.losses import MSETight
+from hybra._fit_neurodual import MSETight
 
 
 model = NeuroDual(filterbank_config={'filter_len':128,
@@ -107,12 +107,12 @@ plot_response(model.kernels_real.squeeze().detach().cpu().numpy() + 1j * model.k
 
 
 
-model.eval()
+# model.eval()
 
-with torch.no_grad():
-    input, fs = soundfile.read('/Users/dani/Documents/Data/test.wav')
-    input = input[16000:48000, 0]
-    input = torch.tensor(input, dtype=torch.float32).unsqueeze(0).to(device)
-    output = model(input)
+# with torch.no_grad():
+#     input, fs = soundfile.read('/Users/dani/Documents/Data/test.wav')
+#     input = input[16000:48000, 0]
+#     input = torch.tensor(input, dtype=torch.float32).unsqueeze(0).to(device)
+#     output = model(input)
 
-soundfile.write('/Users/dani/Documents/Data/test_out.wav', output.squeeze().detach().cpu().numpy(), fs)
+# soundfile.write('/Users/dani/Documents/Data/test_out.wav', output.squeeze().detach().cpu().numpy(), fs)

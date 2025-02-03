@@ -3,10 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from hybra.utils import audfilters_fir
 from hybra.utils import plot_response as plot_response_
-from hybra._fit_naurodual import fit
+from hybra._fit_neurodual import fit
 
 class AudletFIR(nn.Module):
-    def __init__(self, filterbank_config={'filter_len':120,
+    def __init__(self, filterbank_config={'filter_len':128,
                                           'num_channels':64,
                                           'fs':16000,
                                           'Ls':16000,
@@ -37,7 +37,7 @@ class AudletFIR(nn.Module):
         
         self.decoder = decoder
         if decoder:
-            decoder_kernels_real, decoder_kernels_imag = fit(filterbank_config, kappa_eps)
+            decoder_kernels_real, decoder_kernels_imag, _, _ = fit(filterbank_config, kappa_eps)
 
             if learnable:
                 self.register_parameter('decoder_kernels_real', nn.Parameter(decoder_kernels_real, requires_grad=True))
@@ -56,7 +56,7 @@ class AudletFIR(nn.Module):
         return out_real + 1j * out_imag
 
     def decoder(self, x_real:torch.Tensor, x_imag:torch.Tensor) -> torch.Tensor:
-        """Forward pass of the dual HybridFilterbank.
+        """Filterbank synthesis.
 
         Parameters:
         -----------
@@ -87,6 +87,6 @@ class AudletFIR(nn.Module):
 
     def plot_decoder_response(self):
         if self.decoder:
-            plot_response_(g=(self.decoder_kernels_real+1j*self.decoder_kernels_imag).detach().numpy(), fs=self.fs, scale=True, fc_crit=self.fc_crit)
+            plot_response_(g=(self.decoder_kernels_real+1j*self.decoder_kernels_imag).detach().numpy(), fs=self.fs)
         else:
             raise NotImplementedError("No decoder configured")

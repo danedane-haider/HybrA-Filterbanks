@@ -20,7 +20,7 @@ class MSETight(torch.nn.Module):
 
         return loss, loss + self.beta * (kappa - 1), kappa.item()
 
-def noise_uniform(dur=2, fs=16000):
+def noise_uniform(dur=1, fs=16000):
     N = int(dur * fs)
     X = torch.rand(N // 2 + 1) * 2 - 1
     
@@ -37,7 +37,7 @@ class NeuroDual(nn.Module):
 	def __init__(self, filterbank_config):
 		super().__init__()
 		
-		[filters, d, fc, fc_crit, L] = audfilters_fir(**filterbank_config)
+		[filters, d, fc, fc_crit, _] = audfilters_fir(**filterbank_config)
 		self.filters = filters
 		self.stride = d
 		self.filter_len = filterbank_config['filter_len'] 
@@ -59,21 +59,21 @@ class NeuroDual(nn.Module):
 	def forward(self, x):
 		x = F.pad(x.unsqueeze(1), (self.filter_len//2, self.filter_len//2), mode='circular')
 		
-		x_real = F.conv1d(x, self.kernels_real.unsqueeze(1), stride=self.stride)
-		x_imag = F.conv1d(x, self.kernels_imag.unsqueeze(1), stride=self.stride)
+		x_real = F.conv1d(x, self.kernels_real.to(x.device).unsqueeze(1), stride=self.stride)
+		x_imag = F.conv1d(x, self.kernels_imag.to(x.device).unsqueeze(1), stride=self.stride)
 		
 		x = F.conv_transpose1d(
 			x_real,
 			self.kernels_decoder_real.unsqueeze(1),
 			stride=self.stride,
 			padding=self.filter_len//2,
-			output_padding=self.stride-4
+			output_padding=self.stride-2
 			) + F.conv_transpose1d(
 				x_imag,
 				self.kernels_decoder_imag.unsqueeze(1),
 				stride=self.stride,
 				padding=self.filter_len//2,
-				output_padding=self.stride-4
+				output_padding=self.stride-2
 			)
 		
 		return x
@@ -90,8 +90,8 @@ def fit(filterbank_config, eps_kappa):
 	while kappa >= eps_kappa:
 		optimizer.zero_grad()
 # 		x = noise_uniform(filterbank_config['Ls']/filterbank_config['fs'],filterbank_config['fs'])
-		
-		x = noise_uniform(2)
+
+		x = noise_uniform(1)
 		
 		output = model(x)
 		
@@ -106,4 +106,4 @@ def fit(filterbank_config, eps_kappa):
 		print(f'Loss: {loss.item()}')
 		print(f'Kappa: {kappa}')
 	
-	return model.kernels_decoder_real.detach(), model.kernels_decoder_imag.detach()
+	return model.kernels_decoder_real.detach(), model.kernels_decoder_imag.detach(), losses, kappas

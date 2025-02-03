@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from hybra.utils import calculate_condition_number, fir_tightener3000, audfilters_fir
 
 class HybrA(nn.Module):
-    def __init__(self, filterbank_config={'filter_len':120,
+    def __init__(self, filterbank_config={'filter_len':128,
                                           'num_channels':64,
                                           'fs':16000,
                                           'Ls':16000,
