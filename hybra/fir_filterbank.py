@@ -87,6 +87,6 @@ class AudletFIR(nn.Module):
 
     def plot_decoder_response(self):
         if self.decoder:
-            plot_response_(g=(self.decoder_kernels_real+1j*self.decoder_kernels_imag).detach().numpy(), fs=self.fs)
+            plot_response_(g=(self.decoder_kernels_real+1j*self.decoder_kernels_imag).detach().numpy(), fs=self.fs, decoder=True)
         else:
             raise NotImplementedError("No decoder configured")
