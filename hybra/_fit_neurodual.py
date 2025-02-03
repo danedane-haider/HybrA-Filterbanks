@@ -12,18 +12,15 @@ class MSETight(torch.nn.Module):
         self.loss = torch.nn.MSELoss()
         self.fs = fs
 
-    def forward(self, preds, target, w=None):  # Fixed indentation here
+    def forward(self, preds, target, w=None):
         loss = self.loss(preds, target)
-        if w is None:
-            return loss
-        else:
-            Lg = w.shape[-1]
-            num_channels = w.shape[0]
-            w_long = torch.concatenate([w, torch.zeros((num_channels, self.fs - Lg))], axis=1)
-            w_hat = torch.sum(torch.abs(torch.fft.fft(w_long, dim=1)[:, :self.fs//2])**2, dim=0)
-            kappa = w_hat.max() / w_hat.min()
-            
-            return loss, loss + self.beta * (kappa - 1), kappa.item()
+        Lg = w.shape[-1]
+        num_channels = w.shape[0]
+        w_long = torch.concatenate([w, torch.zeros((num_channels, self.fs - Lg))], axis=1)
+        w_hat = torch.sum(torch.abs(torch.fft.fft(w_long, dim=1)[:, :self.fs//2])**2, dim=0)
+        kappa = w_hat.max() / w_hat.min()
+        
+        return loss, loss + self.beta * (kappa - 1), kappa.item()
 
 def noise_uniform(dur=1, fs=16000):
     N = int(dur * fs)
@@ -94,10 +91,7 @@ def fit(filterbank_config, eps_kappa):
 	kappa = float('inf')
 	while kappa >= eps_kappa:
 		optimizer.zero_grad()
-# 		x = noise_uniform(filterbank_config['Ls']/filterbank_config['fs'],filterbank_config['fs'])
-
-		x = noise_uniform(1)
-		
+		x = noise_uniform(filterbank_config['Ls']/filterbank_config['fs'],filterbank_config['fs'])		
 		output = model(x)
 		
 		w_real = model.kernels_decoder_real.squeeze()
