@@ -47,16 +47,11 @@ class NeuroDual(nn.Module):
 		self.fc = fc
 		self.fc_crit = fc_crit
 		
-		kernels_real = torch.tensor(filters.real, dtype=torch.float32)
-		kernels_imag = torch.tensor(filters.imag, dtype=torch.float32)
-		self.register_buffer('kernels_real', kernels_real)
-		self.register_buffer('kernels_imag', kernels_imag)
-		
-		kernel_decoder_real = torch.nn.functional.pad(torch.tensor(kernels_real, dtype=torch.float32), (0, 0))
-		kernel_decoder_imag = torch.nn.functional.pad(torch.tensor(kernels_imag, dtype=torch.float32), (0, 0))
-		
-		self.register_parameter('kernels_decoder_real', nn.Parameter(kernel_decoder_real, requires_grad=True))
-		self.register_parameter('kernels_decoder_imag', nn.Parameter(kernel_decoder_imag, requires_grad=True))
+		self.register_buffer('kernels_real', torch.tensor(filters.real, dtype=torch.float32))
+		self.register_buffer('kernels_imag', torch.tensor(filters.imag, dtype=torch.float32))
+
+		self.register_parameter('kernels_decoder_real', nn.Parameter(torch.tensor(filters.real, dtype=torch.float32), requires_grad=True))
+		self.register_parameter('kernels_decoder_imag', nn.Parameter(torch.tensor(filters.imag, dtype=torch.float32), requires_grad=True))
 
 	def forward(self, x):
 		x = F.pad(x.unsqueeze(1), (self.filter_len//2, self.filter_len//2), mode='circular')
