@@ -13,6 +13,7 @@ class AudletFIR(nn.Module):
                                           'bwmul':1},
                                           is_learnable=False,
                                           use_decoder=False,
+                                          is_decoder_learnable=False,
                                           decoder_fit_eps=12e-7):
         super().__init__()
 
@@ -40,7 +41,7 @@ class AudletFIR(nn.Module):
             max_iter = 10000 # TODO: should we do something like that?
             decoder_kernels_real, decoder_kernels_imag, _, _ = fit(filterbank_config, decoder_fit_eps, max_iter)
 
-            if is_learnable:
+            if is_decoder_learnable:
                 self.register_parameter('decoder_kernels_real', nn.Parameter(decoder_kernels_real, requires_grad=True))
                 self.register_parameter('decoder_kernels_imag', nn.Parameter(decoder_kernels_imag, requires_grad=True))
             else:        	
