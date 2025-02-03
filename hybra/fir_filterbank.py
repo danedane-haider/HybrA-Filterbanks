@@ -11,8 +11,8 @@ class AudletFIR(nn.Module):
                                           'fs':16000,
                                           'Ls':16000,
                                           'bwmul':1},
-                                          learnable=False,
-                                          decoder=False,
+                                          is_learnable=False,
+                                          use_decoder=False,
                                           decoder_fit_eps=12e-7):
         super().__init__()
 
@@ -28,18 +28,18 @@ class AudletFIR(nn.Module):
         kernels_real = torch.tensor(filters.real, dtype=torch.float32)
         kernels_imag = torch.tensor(filters.imag, dtype=torch.float32)
 
-        if learnable:
+        if is_learnable:
             self.register_parameter('kernels_real', nn.Parameter(kernels_real, requires_grad=True))
             self.register_parameter('kernels_imag', nn.Parameter(kernels_imag, requires_grad=True))
         else:
             self.register_buffer('kernels_real', kernels_real)
             self.register_buffer('kernels_imag', kernels_imag)
         
-        self.decoder = decoder
-        if decoder:
+        self.use_decoder = use_decoder
+        if use_decoder:
             decoder_kernels_real, decoder_kernels_imag, _, _ = fit(filterbank_config, decoder_fit_eps)
 
-            if learnable:
+            if is_learnable:
                 self.register_parameter('decoder_kernels_real', nn.Parameter(decoder_kernels_real, requires_grad=True))
                 self.register_parameter('decoder_kernels_imag', nn.Parameter(decoder_kernels_imag, requires_grad=True))
             else:        	
@@ -88,7 +88,7 @@ class AudletFIR(nn.Module):
         plot_response_(g=(self.kernels_real + 1j*self.kernels_imag).detach().numpy(), fs=self.fs, scale=True, fc_crit=self.fc_crit)
 
     def plot_decoder_response(self):
-        if self.decoder:
+        if self.use_decoder:
             plot_response_(g=(self.decoder_kernels_real+1j*self.decoder_kernels_imag).detach().numpy(), fs=self.fs, decoder=True)
         else:
             raise NotImplementedError("No decoder configured")
