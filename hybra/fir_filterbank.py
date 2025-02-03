@@ -13,7 +13,7 @@ class AudletFIR(nn.Module):
                                           'bwmul':1},
                                           learnable=False,
                                           decoder=False,
-                                          kappa_eps=1.1):
+                                          decoder_fit_eps=16e-7):
         super().__init__()
 
         [filters, d, fc, fc_crit, L] = audfilters_fir(**filterbank_config)
@@ -37,7 +37,7 @@ class AudletFIR(nn.Module):
         
         self.decoder = decoder
         if decoder:
-            decoder_kernels_real, decoder_kernels_imag, _, _ = fit(filterbank_config, kappa_eps)
+            decoder_kernels_real, decoder_kernels_imag, _, _ = fit(filterbank_config, decoder_fit_eps)
 
             if learnable:
                 self.register_parameter('decoder_kernels_real', nn.Parameter(decoder_kernels_real, requires_grad=True))

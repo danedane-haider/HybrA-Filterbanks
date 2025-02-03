@@ -80,7 +80,7 @@ class NeuroDual(nn.Module):
 		
 		return x
 
-def fit(filterbank_config, eps_kappa):
+def fit(filterbank_config, eps_loss):
 	model = NeuroDual(filterbank_config=filterbank_config)
 	optimizer = optim.Adam(model.parameters(), lr=5e-4)
 	criterion = MSETight(beta=1e-8)
@@ -88,8 +88,8 @@ def fit(filterbank_config, eps_kappa):
 	losses = []
 	kappas = []	
 
-	kappa = float('inf')
-	while kappa >= eps_kappa:
+	loss_item = float('inf')
+	while loss_item >= eps_loss:
 		optimizer.zero_grad()
 		x = noise_uniform(filterbank_config['Ls']/filterbank_config['fs'],filterbank_config['fs'])		
 		output = model(x)
@@ -98,6 +98,7 @@ def fit(filterbank_config, eps_kappa):
 		w_imag = model.kernels_decoder_imag.squeeze()
 		
 		loss, loss_tight, kappa = criterion(output, x, w_real + 1j*w_imag)
+		loss_item = loss.item()
 		loss_tight.backward()
 		optimizer.step()
 		losses.append(loss.item())
