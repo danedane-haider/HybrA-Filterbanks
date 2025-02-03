@@ -480,37 +480,65 @@ def plot_response(g, fs, scale=False, fc_crit=None):
         ind_crit (int): Index of the critical filter.
     """
     g_hat = response(g, fs)
+    psd = np.sum(g_hat, axis=0)
 
     if scale:
-        fig, ax = plt.subplots(3, 1, figsize=(10, 12))
+        fig, ax = plt.subplots(3, 1, figsize=(12, 8), sharex=True)
 
-        num_channels = g_hat.shape[0]
+        scale_id = 0
+        fr_id = 1
+        psd_id = 2
+
+        num_channels = g.shape[0]
+        filter_length = g.shape[1]
         freq_samples, aud_samples = audspace_mod(fc_crit, fs, num_channels)
         freqs = np.linspace(0, fs//2, fs//2)
 
-        ax[2].scatter(freq_samples, freqtoaud_mod(freq_samples, fc_crit), color="black", label="Center frequencies", linewidths = 0.05)
-        ax[2].plot(freqs, freqtoaud_mod(freqs, fc_crit), color='black', label="Modified Auditory Scale")
+        auds = freqtoaud_mod(freqs, fc_crit)
+
+        ax[scale_id].scatter(freq_samples, freqtoaud_mod(freq_samples, fc_crit), color="black", label="Center frequencies", linewidths = 0.05)
+        ax[scale_id].plot(freqs, auds, color='black')#, label="Modified Auditory Scale")
+
         if fc_crit is not None:
-            ax[2].axvline(fc_crit, color='orange', linestyle='--', label="Critical center frequency", alpha=0.5)
-        ax[2].set_xlabel("Frequency (Hz)")
-        ax[2].set_ylabel("Modified Auditory Scale")
-        ax[2].legend()
+            ax[scale_id].axvline(fc_crit, color='salmon', linestyle='--', label="Transition frequency", alpha=0.5)
+            ax[scale_id].fill_betweenx(y=[auds[0]-1, auds[-1]+1], x1=0, x2=fc_crit, color='gray', alpha=0.25)
+            ax[scale_id].fill_betweenx(y=[auds[0]-1, auds[-1]+1], x1=fc_crit, x2=fs//2, color='gray', alpha=0.1)
+
+            ax[fr_id].fill_betweenx(y=[0, np.max(g_hat)+1], x1=0, x2=fc_crit, color='gray', alpha=0.25)
+            ax[fr_id].fill_betweenx(y=[0, np.max(g_hat)+1], x1=fc_crit, x2=fs//2, color='gray', alpha=0.1)
+            ax[psd_id].fill_betweenx(y=[0, np.max(psd)+1], x1=0, x2=fc_crit, color='gray', alpha=0.25)
+            ax[psd_id].fill_betweenx(y=[0, np.max(psd)+1], x1=fc_crit, x2=fs//2, color='gray', alpha=0.1)
+
+        ax[scale_id].set_xlim([0, fs//2])
+        ax[scale_id].set_ylim([auds[0]-1, auds[-1]+1])
+        #ax[scale_id].set_xlabel("Frequency (Hz)")
+        text_x = fc_crit / 2
+        text_y = auds[-1] - 2
+        ax[scale_id].text(text_x, text_y, 'linear', color='black', ha='center', va='center', fontsize=12, alpha=0.75)
+        ax[scale_id].text(text_x + fc_crit - 1, text_y, 'ERB', color='black', ha='center', va='center', fontsize=12, alpha=0.75)
+        ax[scale_id].set_title(f"Modified Auditory Scale for {num_channels} filters of length {filter_length}")
+        ax[scale_id].set_ylabel("Auditory Units")
+        ax[scale_id].legend(loc='lower right')
 
     else:
         fig, ax = plt.subplots(2, 1, figsize=(10, 8))
+
+        fr_id = 0
+        psd_id = 1
     
     f_range = np.linspace(0, fs//2, fs//2)
-    ax[0].plot(f_range, g_hat.T)
-    ax[0].set_title('Frequency responses of the filters')
-    ax[0].set_xlabel('Frequency [Hz]')
-    ax[0].set_ylabel('Magnitude')
+    ax[fr_id].set_xlim([0, fs//2])
+    ax[fr_id].set_ylim([0, np.max(g_hat)+1])
+    ax[fr_id].plot(f_range, g_hat.T)
+    ax[fr_id].set_title('Frequency responses of the filters')
+    #ax[fr_id].set_xlabel('Frequency [Hz]')
+    ax[fr_id].set_ylabel('Magnitude')
 
-    psd = np.sum(g_hat, axis=0)
-
-    ax[1].plot(f_range, psd)
-    ax[1].set_ylim([0, np.max(psd)+1])
-    ax[1].set_title('Power spectral density')
-    ax[1].set_xlabel('Frequency [Hz]')
-    ax[1].set_ylabel('Magnitude')
+    ax[psd_id].plot(f_range, psd)
+    ax[psd_id].set_xlim([0, fs//2])
+    ax[psd_id].set_ylim([0, np.max(psd)+1])
+    ax[psd_id].set_title('Power spectral density')
+    ax[psd_id].set_xlabel('Frequency [Hz]')
+    ax[psd_id].set_ylabel('Magnitude')
 
     plt.show()
