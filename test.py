@@ -3,10 +3,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from hybra import AudletFIR
 
-filterbank = AudletFIR(filterbank_config={'filter_len':128,
-                                          'num_channels':64,
+filterbank = AudletFIR(filterbank_config={'filter_len':64,
+                                          'num_channels':42,
                                           'fs':16000,
-                                          'Ls':16000,
+                                          'Ls':5*16000,
                                           'bwmul':1},use_decoder=True)
 
 # filterbank.plot_response()
