@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 from hybra.utils import audfilters_fir
+import warnings
 
 class MSETight(torch.nn.Module):
     def __init__(self, beta: float = 0.0, fs: int = 16000):
@@ -54,28 +55,25 @@ class NeuroDual(nn.Module):
 		self.register_parameter('kernels_decoder_imag', nn.Parameter(torch.tensor(filters.imag, dtype=torch.float32), requires_grad=True))
 
 	def forward(self, x):
-		x = F.pad(x.unsqueeze(1), (self.filter_len//2, self.filter_len//2), mode='circular')
-		
+		# x = F.pad(x.unsqueeze(1), (self.filter_len//2, self.filter_len//2), mode='circular')
+		x = x.unsqueeze(1)
+
 		x_real = F.conv1d(x, self.kernels_real.to(x.device).unsqueeze(1), stride=self.stride)
 		x_imag = F.conv1d(x, self.kernels_imag.to(x.device).unsqueeze(1), stride=self.stride)
-		
+
 		x = F.conv_transpose1d(
 			x_real,
 			self.kernels_decoder_real.unsqueeze(1),
 			stride=self.stride,
-			padding=self.filter_len // 2,
-    		output_padding=self.stride - 2
 			) + F.conv_transpose1d(
 				x_imag,
 				self.kernels_decoder_imag.unsqueeze(1),
 				stride=self.stride,
-				padding=self.filter_len // 2,
-    			output_padding=self.stride - 2
 			)
 		
 		return x
 
-def fit(filterbank_config, eps_loss):
+def fit(filterbank_config, eps_loss, max_iter):
 	model = NeuroDual(filterbank_config=filterbank_config)
 	optimizer = optim.Adam(model.parameters(), lr=5e-4)
 	criterion = MSETight(beta=1e-8)
@@ -84,21 +82,28 @@ def fit(filterbank_config, eps_loss):
 	kappas = []	
 
 	loss_item = float('inf')
+	i = 0
+	print("Fitting filterbank. This might take a while ...")
 	while loss_item >= eps_loss:
 		optimizer.zero_grad()
-		x = noise_uniform(filterbank_config['Ls']/filterbank_config['fs'],filterbank_config['fs'])		
+		x = noise_uniform(filterbank_config['Ls']/filterbank_config['fs'],filterbank_config['fs'])
 		output = model(x)
 		
 		w_real = model.kernels_decoder_real.squeeze()
 		w_imag = model.kernels_decoder_imag.squeeze()
 		
-		loss, loss_tight, kappa = criterion(output, x, w_real + 1j*w_imag)
+		loss, loss_tight, kappa = criterion(output, x.unsqueeze(0), w_real + 1j*w_imag)
 		loss_item = loss.item()
 		loss_tight.backward()
 		optimizer.step()
 		losses.append(loss.item())
 		kappas.append(kappa)
-		print(f'Loss: {loss.item()}')
-		print(f'Kappa: {kappa}')
+
+		if i > max_iter:
+			warnings.warn(f"Did not converge after {max_iter} iterations.")
+			break
+		i += 1
+
+	print(f"Final Fit:\n\tkappa: {kappas[-1]}\n\tloss: {losses[-1]}")
 	
 	return model.kernels_decoder_real.detach(), model.kernels_decoder_imag.detach(), losses, kappas
