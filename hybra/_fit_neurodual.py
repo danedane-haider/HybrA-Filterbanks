@@ -65,10 +65,12 @@ class NeuroDual(nn.Module):
 			x_real,
 			self.kernels_decoder_real.unsqueeze(1),
 			stride=self.stride,
+			output_padding=x.shape[-1] - (x_real.shape[-1]-1)*self.stride - self.kernels_decoder_real.shape[-1]
 			) + F.conv_transpose1d(
 				x_imag,
 				self.kernels_decoder_imag.unsqueeze(1),
 				stride=self.stride,
+				output_padding=x.shape[-1] - (x_real.shape[-1]-1)*self.stride - self.kernels_decoder_real.shape[-1]
 			)
 		
 		return x
