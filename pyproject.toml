@@ -10,7 +10,6 @@ dependencies = [
   "matplotlib",
   "numpy",
   "torch",
-  "scipy",
 ]
 authors = [
   {name = "The hybra project maintainers"},
