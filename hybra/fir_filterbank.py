@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from hybra.utils import audfilters_fir
 from hybra.utils import plot_response as plot_response_
+from hybra._fit_naurodual import fit
 
 class AudletFIR(nn.Module):
     def __init__(self, filterbank_config={'filter_len':120,
@@ -10,7 +11,9 @@ class AudletFIR(nn.Module):
                                           'fs':16000,
                                           'Ls':16000,
                                           'bwmul':1},
-                                          learnable=True):
+                                          learnable=False,
+                                          decoder=False,
+                                          kappa_eps=1.2):
         super().__init__()
 
         [filters, d, fc, fc_crit, L] = audfilters_fir(**filterbank_config)
@@ -31,6 +34,18 @@ class AudletFIR(nn.Module):
         else:
             self.register_buffer('kernels_real', kernels_real)
             self.register_buffer('kernels_imag', kernels_imag)
+        
+        self.decoder = decoder
+        if decoder:
+            decoder_kernels_real, decoder_kernels_imag = fit(filterbank_config, kappa_eps)
+
+            if learnable:
+                self.register_parameter('decoder_kernels_real', nn.Parameter(decoder_kernels_real, requires_grad=True))
+                self.register_parameter('decoder_kernels_imag', nn.Parameter(decoder_kernels_imag, requires_grad=True))
+            else:        	
+                self.register_buffer('decoder_kernels_real', decoder_kernels_real)
+                self.register_buffer('decoder_kernels_imag', decoder_kernels_imag)
+            
 
     def forward(self, x):
         x = F.pad(x.unsqueeze(1), (self.filter_len//2, self.filter_len//2), mode='circular')
@@ -40,33 +55,38 @@ class AudletFIR(nn.Module):
 
         return out_real + 1j * out_imag
 
-    # def decoder(self, x_real:torch.Tensor, x_imag:torch.Tensor) -> torch.Tensor:
-    #     """Forward pass of the dual HybridFilterbank.
+    def decoder(self, x_real:torch.Tensor, x_imag:torch.Tensor) -> torch.Tensor:
+        """Forward pass of the dual HybridFilterbank.
 
-    #     Parameters:
-    #     -----------
-    #     x (torch.Tensor) - input tensor of shape (batch_size, n_filters, signal_length//hop_length)
+        Parameters:
+        -----------
+        x (torch.Tensor) - input tensor of shape (batch_size, n_filters, signal_length//hop_length)
 
-    #     Returns:
-    #     --------
-    #     x (torch.Tensor) - output tensor of shape (batch_size, signal_length)
-    #     """
-    #     x = (
-    #         F.conv_transpose1d(
-    #             x_real,
-    #             self.kernels_real.to(x_real.device).unsqueeze(1),
-    #             stride=self.stride,
-    #             padding=self.filter_len//2,
-    #         )
-    #         + F.conv_transpose1d(
-    #             x_imag,
-    #             self.kernels_imag.to(x_imag.device).unsqueeze(1),
-    #             stride=self.stride,
-    #             padding=self.filter_len//2,
-    #         )
-    #     )
+        Returns:
+        --------
+        x (torch.Tensor) - output tensor of shape (batch_size, signal_length)
+        """
+        x = (
+            F.conv_transpose1d(
+                x_real,
+                self.decoder_kernels_real.to(x_real.device).unsqueeze(1),
+                stride=self.stride,
+                padding=self.filter_len//2,
+            ) + F.conv_transpose1d(
+                x_imag,
+                self.decoder_kernels_imag.to(x_imag.device).unsqueeze(1),
+                stride=self.stride,
+                padding=self.filter_len//2,
+            )
+        )
 
-    #     return x.squeeze(1)
+        return x.squeeze(1)
 
     def plot_response(self):
         plot_response_(g=(self.kernels_real + 1j*self.kernels_imag).detach().numpy(), fs=self.fs, scale=True, fc_crit=self.fc_crit)
+
+    def plot_decoder_response(self):
+        if self.decoder:
+            plot_response_(g=(self.decoder_kernels_real+1j*self.decoder_kernels_imag).detach().numpy(), fs=self.fs, scale=True, fc_crit=self.fc_crit)
+        else:
+            raise NotImplementedError("No decoder configured")
