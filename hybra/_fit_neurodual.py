@@ -6,19 +6,24 @@ import torch.optim as optim
 from hybra.utils import audfilters_fir
 
 class MSETight(torch.nn.Module):
-
-    def __init__(self, beta: float = 0.0):
+    def __init__(self, beta: float = 0.0, fs: int = 16000):
         super().__init__()
         self.beta = beta
         self.loss = torch.nn.MSELoss()
+        self.fs = fs
 
-    def forward(self, preds, target, w=None):
+    def forward(self, preds, target, w=None):  # Fixed indentation here
         loss = self.loss(preds, target)
-        w_hat = torch.sum(torch.abs(torch.fft.fft(w, dim=1))**2, dim=0)
-
-        kappa = w_hat.max() / w_hat.min()
-
-        return loss, loss + self.beta * (kappa - 1), kappa.item()
+        if w is None:
+            return loss
+        else:
+            Lg = w.shape[-1]
+            num_channels = w.shape[0]
+            w_long = torch.concatenate([w, torch.zeros((num_channels, self.fs - Lg))], axis=1)
+            w_hat = torch.sum(torch.abs(torch.fft.fft(w_long, dim=1)[:, :self.fs//2])**2, dim=0)
+            kappa = w_hat.max() / w_hat.min()
+            
+            return loss, loss + self.beta * (kappa - 1), kappa.item()
 
 def noise_uniform(dur=1, fs=16000):
     N = int(dur * fs)
@@ -66,14 +71,14 @@ class NeuroDual(nn.Module):
 			x_real,
 			self.kernels_decoder_real.unsqueeze(1),
 			stride=self.stride,
-			padding=self.filter_len//2,
-			output_padding=self.stride-2
+			padding=self.filter_len // 2,
+    		output_padding=self.stride - 2
 			) + F.conv_transpose1d(
 				x_imag,
 				self.kernels_decoder_imag.unsqueeze(1),
 				stride=self.stride,
-				padding=self.filter_len//2,
-				output_padding=self.stride-2
+				padding=self.filter_len // 2,
+    			output_padding=self.stride - 2
 			)
 		
 		return x

@@ -13,7 +13,7 @@ class AudletFIR(nn.Module):
                                           'bwmul':1},
                                           learnable=False,
                                           decoder=False,
-                                          kappa_eps=1.2):
+                                          kappa_eps=1.1):
         super().__init__()
 
         [filters, d, fc, fc_crit, L] = audfilters_fir(**filterbank_config)
