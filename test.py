@@ -9,8 +9,8 @@ filterbank = AudletFIR(filterbank_config={'filter_len':64,
                                           'Ls':5*16000,
                                           'bwmul':1},use_decoder=True)
 
-# filterbank.plot_response()
-# filterbank.plot_decoder_response()
+filterbank.plot_response()
+filterbank.plot_decoder_response()
 
 import soundfile
 

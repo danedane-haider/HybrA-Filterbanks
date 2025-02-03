@@ -37,7 +37,7 @@ class AudletFIR(nn.Module):
         
         self.use_decoder = use_decoder
         if use_decoder:
-            max_iter = 500 # TODO: should we do something like that?
+            max_iter = 10000 # TODO: should we do something like that?
             decoder_kernels_real, decoder_kernels_imag, _, _ = fit(filterbank_config, decoder_fit_eps, max_iter)
 
             if is_learnable:

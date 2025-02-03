@@ -65,9 +65,7 @@ class NeuroDual(nn.Module):
 		kernel_size = self.kernels_decoder_real.shape[-1]
 		padding = self.filter_len // 2
 
-
 		# L_out = (L_in -1) * stride - 2 * padding + dialation * (kernel_size - 1) + output_padding + 1 ; dialation = 1
-		# output_padding = L_out - (L_in -1)*stride + 2*padding - kernel_size
 		output_padding=L_out - (L_in -1)*self.stride + 2*padding - kernel_size
 
 		x = F.conv_transpose1d(
