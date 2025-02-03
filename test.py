@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from hybra import AudletFIR
 from hybra.utils import audfilters_fir, response, plot_response
 
-filter_length = 128
+filter_length = 256
 num_channels = 40
 fs = 16000
 Ls = 4*fs
