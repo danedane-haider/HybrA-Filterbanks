@@ -89,9 +89,9 @@ def fit(filterbank_config, eps_kappa):
 	kappa = float('inf')
 	while kappa >= eps_kappa:
 		optimizer.zero_grad()
-		x = noise_uniform(filterbank_config['Ls']/filterbank_config['fs'],filterbank_config['fs'])
+# 		x = noise_uniform(filterbank_config['Ls']/filterbank_config['fs'],filterbank_config['fs'])
 		
-# 		x = noise_uniform(2)
+		x = noise_uniform(2)
 		
 		output = model(x)
 		
@@ -106,4 +106,4 @@ def fit(filterbank_config, eps_kappa):
 		print(f'Loss: {loss.item()}')
 		print(f'Kappa: {kappa}')
 	
-	return model.kernels_real.detach(), model.kernels_imag.detach()
+	return model.kernels_decoder_real.detach(), model.kernels_decoder_imag.detach()
