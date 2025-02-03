@@ -467,7 +467,7 @@ def response(g, fs):
 
     return G
 
-def plot_response(g, fs, scale=False, fc_crit=None):
+def plot_response(g, fs, scale=False, fc_crit=None, decoder=False):
     """Frequency response of the filters.
     
     Args:
@@ -521,7 +521,7 @@ def plot_response(g, fs, scale=False, fc_crit=None):
         ax[scale_id].legend(loc='lower right')
 
     else:
-        fig, ax = plt.subplots(2, 1, figsize=(10, 8))
+        fig, ax = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
 
         fr_id = 0
         psd_id = 1
@@ -530,7 +530,10 @@ def plot_response(g, fs, scale=False, fc_crit=None):
     ax[fr_id].set_xlim([0, fs//2])
     ax[fr_id].set_ylim([0, np.max(g_hat)+1])
     ax[fr_id].plot(f_range, g_hat.T)
-    ax[fr_id].set_title('Frequency responses of the filters')
+    if decoder:
+        ax[fr_id].set_title('Frequency responses of the synthesis filters')
+    if not decoder:
+        ax[fr_id].set_title('Frequency responses of the analysis filters')
     #ax[fr_id].set_xlabel('Frequency [Hz]')
     ax[fr_id].set_ylabel('Magnitude')
 
