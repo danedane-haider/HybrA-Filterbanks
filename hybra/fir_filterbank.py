@@ -72,11 +72,13 @@ class AudletFIR(nn.Module):
                 self.decoder_kernels_real.to(x_real.device).unsqueeze(1),
                 stride=self.stride,
                 padding=self.filter_len//2,
+    			output_padding=self.stride - 2
             ) + F.conv_transpose1d(
                 x_imag,
                 self.decoder_kernels_imag.to(x_imag.device).unsqueeze(1),
                 stride=self.stride,
                 padding=self.filter_len//2,
+    			output_padding=self.stride - 2
             )
         )
 
