@@ -2,113 +2,149 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 
-def calculate_condition_number(w) -> torch.Tensor:
-    """""
-    Calculate the condition number of a convolution operator via the Littlewood Payley sum.
-    Input: w (torch.tensor) - matrix with filter impulse respones in the columns
-    Output: kappa (torch.tensor) - condition number of the convolution operator
-    """""
-    w_hat: torch.Tensor = torch.sum(torch.abs(torch.fft.fft(w, dim=1)) ** 2, dim=0)
-    B: torch.Tensor = torch.max(w_hat, dim=0).values
-    A: torch.Tensor = torch.min(w_hat, dim=0).values
-    kappa: torch.Tensor = B/A
-    return kappa
+####################################################################################################
+##################### Cool routines to study decimated filterbanks #################################
+####################################################################################################
 
-def smooth_fir(frequency_responses, support):
-    """""
-    Takes a matrix of frequency responses (as columns) and constructs a smoothed FIR version with support length *support*.
-    """""
-    g = np.exp(-np.pi * np.arange(-support//2,support//2)**2 / ((support-12)/2)**2)
-    supper = g.reshape(1,-1)
-    gi = np.fft.ifft(frequency_responses, axis=0)
-    gi = np.roll(gi, support//2, axis=0)
-    g_re = np.real(gi[:support]).T * supper
-    g_im = np.imag(gi[:support]).T * supper
-    return g_re + 1j * g_im
+def condition_number(w_hat:torch.Tensor, D:int) -> torch.Tensor:
+    """
+    Computes the condition number of a filterbank w_hat using the polyphase representation.
+    Input:  w: Frequency responses of the filterbank as 2-D Tensor torch.tensor[length, num_channels]
+            D: Decimation (or downsampling) factor, must divide filter length!
+    Output: Condition number.
+    """
+    if D == 1:
+        lp = torch.sum(w_hat.abs() ** 2, dim=1)
+        A = torch.min(lp)
+        B = torch.max(lp)
+        return B/A
+    else:    
+        N = w_hat.shape[0]
+        J = w_hat.shape[1]
+        assert N % D == 0, "Oh no! Decimation factor must divide signal length!"
 
-def tight(w, ver="S"):
+        A = torch.tensor([torch.inf]).to(w_hat.device)
+        B = torch.tensor([0]).to(w_hat.device)
+        Ha = torch.zeros((D,J)).to(w_hat.device)
+        Hb = torch.zeros((D,J)).to(w_hat.device)
+
+        for j in range(N//D):
+            idx_a = (j - torch.arange(D) * (N//D)) % N
+            idx_b = (torch.arange(D) * (N//D) - j) % N
+            Ha = w_hat[idx_a, :]
+            Hb = torch.conj(w_hat[idx_b, :])
+            lam = torch.linalg.eigvalsh(Ha @ Ha.H + Hb @ Hb.H).real
+            A = torch.min(A, torch.min(lam))
+            B = torch.max(B, torch.max(lam))
+        return B/A
+
+def calculate_condition_number(w:torch.Tensor, D:int):
     """
-    Construction of the canonical tight filterbank
-    :param w: analysis filterbank
-    :param ver: version of the tight filterbank: 'S' yields canonical tight filterbank, 'flat_spec' yields tight filterbank with flat spectral response
-    :return: canonical tight filterbank
+    in: frequency responses of fb (n_filters, system length), decimation factor
+    out: condition number
     """
-    if ver == "S":
-        w_freqz = np.fft.fft(w, axis=1)
-        lp = np.sum(np.abs(w_freqz) ** 2, axis=0)
-        w_freqz_tight = w_freqz * lp ** (-0.5)
-        w_tight = np.fft.ifft(w_freqz_tight, axis=1)
-    elif ver == "flat_spec":
-        M, N = w.shape
-        w_freqz = np.fft.fft(w, axis=1).T
-        w_tight = np.zeros((M, N), dtype=np.complex64)
-        for k in range(N):
-            H = w_freqz[k, :]
-            U = H / np.linalg.norm(H)
-            w_tight[:, k] = np.conj(U)
-        w_tight = np.fft.ifft(w_tight.T, axis=0).T
+    w_hat = torch.fft.fft(w, dim=-1).T
+    return condition_number(w_hat, D)
+
+def can_tight(w:torch.Tensor, D:int) -> torch.Tensor:
+    """
+    Computes the canonical tight filterbank of w (time domain) using the polyphase representation.
+    Input:  w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[num_channels, length]
+            D: Decimation (or downsampling) factor, must divide filter length!
+    Output: Canonical tight filterbank of W (torch.tensor[num_channels, length])
+    """
+    w_hat = torch.fft.fft(w.T, dim=0)
+    if D == 1:
+        lp = torch.sum(w_hat.abs() ** 2, dim=1).reshape(-1,1)
+        w_hat_tight = w_hat * (lp ** (-0.5))
+        return torch.fft.ifft(w_hat_tight.T, dim=1)
     else:
-        raise NotImplementedError
-    return w_tight
+        N = w_hat.shape[0]
+        J = w_hat.shape[1]
+        assert N % D == 0, "Oh no! Decimation factor must divide signal length!"
 
-def frame_bounds_lp(w, freq=False):
-    # if the filters are given already as frequency responses
-    if freq:
-        w_hat = np.sum(np.abs(w) ** 2, axis=1)
-    else:
-        w_hat = np.sum(np.abs(np.fft.fft(w, axis=1)) ** 2, axis=0)
-    B = np.max(w_hat)
-    A = np.min(w_hat)
+        w_hat_tight = torch.zeros(J, N, dtype=torch.complex64)
+        for j in range(N//D):
+            idx = (j - torch.arange(D) * (N//D)) % N
+            H = w_hat[idx, :]
+            U, _, V = torch.linalg.svd(H, full_matrices=False)
+            H = U @ V
+            w_hat_tight[:,idx] = H.T.to(torch.complex64)
+        return torch.fft.ifft(torch.fft.ifft(w_hat_tight.T, dim=1) * D ** 0.5, dim=0).T
 
-    return A, B
-
-def fir_tightener3000(w, supp, eps=1.1, print_kappa=False):
+def frame_bounds(w, D):
     """
-    Iterative construction of a tight filterbank with a given support
-    :param w: analysis filterbank
-    :param supp: desired support of the tight filterbank
-    :param eps: desired precision for kappa = B/A
-    :return: tight filterbank
+    in: frequency responses of fb (system length, n_filters), decimation factor
+    out: frame bounds
     """
-    A, B = frame_bounds_lp(w)
-    w_tight = w.copy()
-    while B / A > eps:
-        w_tight = tight(w_tight)
+    N = w.shape[0]
+    M = w.shape[1]
+    assert N % D == 0
+
+    A = torch.inf
+    B = 0
+    Ha = torch.zeros((D,M))
+    Hb = torch.zeros((D,M))
+
+    for j in range(N//D):
+        idx_a = np.mod(j - np.arange(D) * (N//D), N).astype(int)
+        idx_b = np.mod(np.arange(D) * (N//D) - j, N).astype(int)
+        Ha = w[idx_a, :]
+        Hb = torch.conj(w[idx_b, :])
+        lam = torch.linalg.eigvalsh(Ha @ Ha.H + Hb @ Hb.H).real
+        A = np.min([A, torch.min(lam).item()]).item()
+        B = np.max([B, torch.max(lam).item()]).item()
+    return A/D, B/D
+
+def kappa_alias(w:torch.Tensor, D:int) -> torch.Tensor:
+    """
+    Computes the frequency correlation functions.
+    Input:  w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[num_channels, sig_length]
+            D: Decimation (or downsampling) factor, must divide filter length!
+            aliasing: If False, only the condition umber is returned
+    Output: Condition number and norm of the aliasing term
+    """
+    w_hat = torch.fft.fft(w, dim=-1).T
+    N = w_hat.shape[0]
+    G = torch.zeros(N, D)
+    G[:,0] = torch.sum(torch.abs(w_hat)**2, dim=1)
+    for j in range(1,D):
+        G[:,j] = torch.sum(w_hat * torch.conj(w_hat.roll(j * N//D, 0)), dim=1)
+    return G
+
+def alias_conditioner(w:torch.Tensor, D:int, aliasing:bool=True) -> torch.Tensor:
+    G = kappa_alias(w, D)
+    return torch.max(G[:,0]).div(torch.min(G[:,0])) + torch.norm(G[:,1::], dim=1)**2 - 1
+
+def fir_tightener3000(w, supp, D, eps=1.01, Ls=None):
+    """
+    Iterative tightening procedure with fixed support for a given filterbank w
+    Input:  w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[num_channels, length].
+            supp: Desired support of the resulting filterbank
+            D: Decimation (or downsampling) factor, must divide filter length!
+            eps: Desired condition number
+            Ls: control syste length
+    Output: Filterbank with condition number *kappa* and support length *supp*. If length=supp then the resulting filterbank is the canonical tight filterbank of w.
+    """
+    if Ls is not None:
+        w =  torch.cat([w, torch.zeros(w.shape[0], Ls-w.shape[1])], dim=1)
+    w_tight = w.clone()
+    kappa = calculate_condition_number(w, D)
+    kappa = kappa[0].item()
+    while kappa > eps:
+        w_tight = can_tight(w_tight, D)
         w_tight[:, supp:] = 0
-        w_tight = np.real(w_tight)
-        A, B = frame_bounds_lp(w_tight)
-        kappa = B / A
-        error = np.linalg.norm(w - w_tight)
-        if print_kappa:
-            print("kappa:", "%.4f" % kappa, ", error:", "%.4f" % error)
-    return w_tight
-
-def audtofreq(aud, scale="erb"):
-    """
-    Converts auditory units to frequency (Hz). Note that fs = 2.
-
-    Parameters:
-    aud (float or numpy array): Auditory scale value(s) to convert.
-    scale (str): The auditory scale. Options are:
-        - "mel": Mel scale
-        - "erb": Equivalent Rectangular Bandwidth scale (default)
-        - "bark": Bark scale
-        - "log10": Base-10 logarithmic scale
-        - "semitone": Semitone logarithmic scale
-
-    Returns:
-    float or numpy array: Frequency value(s) in Hz.
-    """
-    if scale == "mel":
-        return 700 * np.sign(aud) * (np.exp(np.abs(aud) * np.log(17 / 7) / 1000) - 1)
-    elif scale == "erb":
-        return (1 / 0.00437) * (np.exp(aud / 9.2645) - 1)
-    elif scale == "bark":
-        return np.sign(aud) * 1960 / (26.81 / (np.abs(aud) + 0.53) - 1)
-    elif scale in ["log10", "semitone"]:
-        return 10 ** aud
+        kappa = calculate_condition_number(w_tight, D)
+        kappa = kappa[0].item()
+    if Ls is None:
+        return w_tight
     else:
-        raise ValueError(f"Unsupported scale: '{scale}'. Available options are: 'mel', 'erb', 'bark', 'log10', 'semitone'.")
+        return w_tight[:,:supp]
+    
+
+####################################################################################################
+################### Routines for constructing auditory filterbanks #################################
+####################################################################################################
 
 def freqtoaud(freq, scale="erb"):
     """
@@ -145,16 +181,42 @@ def freqtoaud(freq, scale="erb"):
         return np.log10(freq)
 
     else:
-        raise ValueError(f"Unsupported scale: '{scale}'. Available options are: 'mel', 'erb', 'bark', 'log10', 'semitone'.")
+        raise ValueError(f"Unsupported scale: '{scale}'. Available options are: 'mel', 'erb', 'bark', 'log10'.")
 
-def audspace(fmin, fmax, n, scale="erb"):
+def audtofreq(aud, scale="erb"):
+    """
+    Converts auditory units to frequency (Hz).
+    Parameters:
+    aud (float or numpy array): Auditory scale value(s) to convert.
+    scale (str): Auditory scale. Supported values are:
+                 - 'erb' (default)
+                 - 'mel'
+                 - 'bark'
+                 - 'log10'
+
+    Returns:
+    float or numpy array: Frequency value(s) in Hz.
+    """
+    if scale == "mel":
+        return 700 * np.sign(aud) * (np.exp(np.abs(aud) * np.log(17 / 7) / 1000) - 1)
+    elif scale == "erb":
+        return (1 / 0.00437) * (np.exp(aud / 9.2645) - 1)
+    elif scale == "bark":
+        return np.sign(aud) * 1960 / (26.81 / (np.abs(aud) + 0.53) - 1)
+    elif scale in ["log10", "semitone"]:
+        return 10 ** aud
+    else:
+        raise ValueError(f"Unsupported scale: '{scale}'. Available options are: 'mel', 'erb', 'bark', 'log10'.")
+
+
+def audspace(fmin, fmax, num_channels, scale="erb"):
     """
     Computes a vector of values equidistantly spaced on the selected auditory scale.
 
     Parameters:
     fmin (float): Minimum frequency in Hz.
     fmax (float): Maximum frequency in Hz.
-    n (int): Number of points in the output vector.
+    num_channels (int): Number of points in the output vector.
     audscale (str): Auditory scale (default is 'erb').
 
     Returns:
@@ -168,7 +230,7 @@ def audspace(fmin, fmax, n, scale="erb"):
     if not (isinstance(fmax, (int, float)) and np.isscalar(fmax)):
         raise ValueError("fmax must be a scalar.")
     
-    if not (isinstance(n, int) and n > 0):
+    if not (isinstance(num_channels, int) and num_channels > 0):
         raise ValueError("n must be a positive integer scalar.")
     
     if fmin > fmax:
@@ -178,20 +240,26 @@ def audspace(fmin, fmax, n, scale="erb"):
     audlimits = freqtoaud(np.array([fmin, fmax]), scale)
 
     # Generate frequencies spaced evenly on the auditory scale
-    aud_space = np.linspace(audlimits[0], audlimits[1], n)
+    aud_space = np.linspace(audlimits[0], audlimits[1], num_channels)
     y = audtofreq(aud_space, scale)
 
-    # Calculate the bandwidth
-    #bw = (audlimits[1] - audlimits[0]) / (n - 1)
-
-    # Set exact endpoints
+    # Ensure exact endpoints
     y[0] = fmin
     y[-1] = fmax
 
     return y
 
 def freqtoaud_mod(freq, fc_crit):
-    """Modified auditory scale function with linear region below fc_crit."""
+    """
+    Modified auditory scale function with linear region below fc_crit.
+    
+    Parameters:
+    freq (ndarray): Frequency values in Hz.
+    fc_crit (float): Critical frequency in Hz.
+
+    Returns:
+    ndarray: Values on the modified auditory scale.
+    """
     aud_crit = freqtoaud(fc_crit)
     slope = (freqtoaud(fc_crit * 1.01) - aud_crit) / (fc_crit * 0.01)
 
@@ -205,7 +273,16 @@ def freqtoaud_mod(freq, fc_crit):
     return aud
 
 def audtofreq_mod(aud, fc_crit):
-    """Inverse of freqtoaud_mod to map auditory scale back to frequency."""
+    """
+    Inverse of freqtoaud_mod to map auditory scale back to frequency.
+    
+    Parameters:
+    aud (ndarray): Auditory scale values.
+    fc_crit (float): Critical frequency in Hz.
+
+    Returns:
+    ndarray: Frequency values in Hz
+    """
     aud_crit = freqtoaud(fc_crit)
     slope = (freqtoaud(fc_crit * 1.01) - aud_crit) / (fc_crit * 0.01)
 
@@ -218,19 +295,29 @@ def audtofreq_mod(aud, fc_crit):
 
     return freq
 
-def audspace_mod(fc_crit, fs, M):
-    """Generate M frequency samples that are equidistant in the modified auditory scale."""
-    # Calculate the modified auditory scale values for 0 Hz and fmax
-    aud_start = freqtoaud_mod(np.array([0]), fc_crit)[0]
-    aud_end = freqtoaud_mod(np.array([fs//2]), fc_crit)[0]
+def audspace_mod(fc_crit, fs, num_channels):
+    """Generate M frequency samples that are equidistant in the modified auditory scale.
+    
+    Parameters:
+    fc_crit (float): Critical frequency in Hz.
+    fs (int): Sampling rate in Hz.
+    M (int): Number of filters/channels.
 
-    # Generate M equidistant points in the modified auditory scale
-    fc_aud = np.linspace(aud_start, aud_end, M)
+    Returns:
+    ndarray: Frequency values in Hz and in the auditory scale.
+    """
 
-    # Convert auditory scale values back to frequency values
+    # Convert [0, fs//2] to modified auditory scale
+    aud_min = freqtoaud_mod(np.array([0]), fc_crit)[0]
+    aud_max = freqtoaud_mod(np.array([fs//2]), fc_crit)[0]
+
+    # Generate frequencies spaced evenly on the modified auditory scale
+    fc_aud = np.linspace(aud_min, aud_max, num_channels)
+
+    # Convert back to frequency scale
     fc = audtofreq_mod(fc_aud, fc_crit)
 
-    # Set the first value to 0 Hz, and the last value to fmax
+    # Ensure exact endpoints
     fc[0] = 0
     fc[-1] = fs//2
 
@@ -238,7 +325,7 @@ def audspace_mod(fc_crit, fs, M):
 
 def fctobw(fc, scale="erb"):
     """
-    Computes the critical bandwidth of the auditory filter at a given center frequency.
+    Computes the critical bandwidth of a filter at a given center frequency.
 
     Parameters:
     fc (float or ndarray): Center frequency in Hz. Must be non-negative.
@@ -247,7 +334,6 @@ def fctobw(fc, scale="erb"):
                     - 'bark': Bark scale
                     - 'mel': Mel scale
                     - 'log10': Logarithmic scale
-                    - 'semitone': Semitone scale
 
     Returns:
     ndarray or float: Critical bandwidth at each center frequency.
@@ -264,7 +350,7 @@ def fctobw(fc, scale="erb"):
         bw = 25 + 75 * (1 + 1.4e-6 * fc**2)**0.69
     elif scale == "mel":
         bw = np.log(17 / 7) * (700 + fc) / 1000
-    elif scale in ["log10", "semitone"]:
+    elif scale in ["log10"]:
         bw = fc
     else:
         raise ValueError(f"Unsupported auditory scale: {scale}")
@@ -282,7 +368,6 @@ def bwtofc(bw, scale="erb"):
                  - 'bark': Bark scale
                  - 'mel': Mel scale
                  - 'log10': Logarithmic scale
-                 - 'semitone': Semitone scale
 
     Returns:
     ndarray or float: Center frequency corresponding to the given bandwidth.
@@ -299,33 +384,33 @@ def bwtofc(bw, scale="erb"):
         fc = np.sqrt(((bw - 25) / 75)**(1 / 0.69) / 1.4e-6)
     elif scale == "mel":
         fc = 1000 * (bw / np.log(17 / 7)) - 700
-    elif scale in ["log10", "semitone"]:
+    elif scale in ["log10"]:
         fc = bw
     else:
         raise ValueError(f"Unsupported auditory scale: {scale}")
 
     return fc
 
-def firwin(window_length, padding_length=None, name='hann'):
+def firwin(window_length, padding_length=None):
     """
     FIR window generation in Python.
     
     Parameters:
         window_length (int): Length of the window.
-        padding_length (int): Length of the padding.
+        padding_length (int): Length to which it should be padded.
         name (str): Name of the window.
         
     Returns:
         g (ndarray): FIR window.
-        info (dict): Metadata about the window.
     """
+
     if window_length % 2 == 0:
         x = np.concatenate([np.linspace(0, 0.5 - 1/window_length, window_length//2), np.linspace(-0.5, -1/window_length, window_length//2)])
     else:
         x = np.concatenate([np.linspace(0, 0.5 - 0.5/window_length, window_length//2), np.linspace(-0.5 + 0.5/window_length, -0.5/window_length, window_length//2)])
-    
     x += window_length//2 / window_length
 
+    # Hann window
     g = 0.5 + 0.5 * np.cos(2 * np.pi * x)
     
     # L1 Normalization
@@ -337,10 +422,8 @@ def firwin(window_length, padding_length=None, name='hann'):
             return g
         else:
             return np.concatenate([g, np.zeros(1)])
-    
     elif padding_length == window_length:
         return g
-    
     elif padding_length > window_length:
         g_padded = np.concatenate([g, np.zeros(padding_length - len(g))])
         g_centered = np.roll(g_padded, (padding_length - len(g))//2)
@@ -361,7 +444,7 @@ def modulate(g, fc, fs):
         g_mod (list of torch.Tensor): Modulated filters.
     """
     Lg = len(g)
-    g_mod = g * np.exp(2*np.pi*1j*fc*np.arange(Lg)/fs)
+    g_mod = g * np.exp(2 * np.pi * 1j * fc * np.arange(Lg) / fs)
     return g_mod
 
 
@@ -497,7 +580,7 @@ def plot_response(g, fs, scale=False, fc_crit=None, decoder=False):
         auds = freqtoaud_mod(freqs, fc_crit)
 
         ax[scale_id].scatter(freq_samples, freqtoaud_mod(freq_samples, fc_crit), color="black", label="Center frequencies", linewidths = 0.05)
-        ax[scale_id].plot(freqs, auds, color='black')#, label="Modified Auditory Scale")
+        ax[scale_id].plot(freqs, auds, color='black')
 
         if fc_crit is not None:
             ax[scale_id].axvline(fc_crit, color='salmon', linestyle='--', label="Transition frequency", alpha=0.5)

@@ -94,7 +94,7 @@ def fit(filterbank_config, eps_loss, max_iter):
 
 	loss_item = float('inf')
 	i = 0
-	print("Fitting filterbank. This might take a while ...")
+	print("Computing the synthesis filterbank. This might take a while ...")
 	while loss_item >= eps_loss:
 		optimizer.zero_grad()
 		x = noise_uniform(filterbank_config['Ls']/filterbank_config['fs'],filterbank_config['fs'])
