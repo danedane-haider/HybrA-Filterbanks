@@ -149,3 +149,5 @@ tighten_cqt_filter.py
 
 uv.lock
 
+test.py
+audio/

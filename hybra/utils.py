@@ -21,7 +21,7 @@ def condition_number(w_hat:torch.Tensor, D:int) -> torch.Tensor:
     else:    
         N = w_hat.shape[0]
         J = w_hat.shape[1]
-        assert N % D == 0, "Oh no! Decimation factor must divide signal length!"
+        assert N % int(D) == 0, "Oh no! Decimation factor must divide signal length!"
 
         A = torch.tensor([torch.inf]).to(w_hat.device)
         B = torch.tensor([0]).to(w_hat.device)
@@ -61,7 +61,7 @@ def can_tight(w:torch.Tensor, D:int) -> torch.Tensor:
     else:
         N = w_hat.shape[0]
         J = w_hat.shape[1]
-        assert N % D == 0, "Oh no! Decimation factor must divide signal length!"
+        assert N % int(D) == 0, "Oh no! Decimation factor must divide signal length!"
 
         w_hat_tight = torch.zeros(J, N, dtype=torch.complex64)
         for j in range(N//D):
