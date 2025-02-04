@@ -129,13 +129,11 @@ def fir_tightener3000(w, supp, D, eps=1.01, Ls=None):
     if Ls is not None:
         w =  torch.cat([w, torch.zeros(w.shape[0], Ls-w.shape[1])], dim=1)
     w_tight = w.clone()
-    kappa = calculate_condition_number(w, D)
-    kappa = kappa[0].item()
+    kappa = calculate_condition_number(w, D).item()
     while kappa > eps:
         w_tight = can_tight(w_tight, D)
         w_tight[:, supp:] = 0
-        kappa = calculate_condition_number(w_tight, D)
-        kappa = kappa[0].item()
+        kappa = calculate_condition_number(w_tight, D).item()
     if Ls is None:
         return w_tight
     else:
@@ -584,16 +582,16 @@ def plot_response(g, fs, scale=False, fc_crit=None, decoder=False):
 
         if fc_crit is not None:
             ax[scale_id].axvline(fc_crit, color='salmon', linestyle='--', label="Transition frequency", alpha=0.5)
-            ax[scale_id].fill_betweenx(y=[auds[0]-1, auds[-1]+1], x1=0, x2=fc_crit, color='gray', alpha=0.25)
-            ax[scale_id].fill_betweenx(y=[auds[0]-1, auds[-1]+1], x1=fc_crit, x2=fs//2, color='gray', alpha=0.1)
+            ax[scale_id].fill_betweenx(y=[auds[0]-1, auds[-1]*1.1], x1=0, x2=fc_crit, color='gray', alpha=0.25)
+            ax[scale_id].fill_betweenx(y=[auds[0]-1, auds[-1]*1.1], x1=fc_crit, x2=fs//2, color='gray', alpha=0.1)
 
-            ax[fr_id].fill_betweenx(y=[0, np.max(g_hat)+1], x1=0, x2=fc_crit, color='gray', alpha=0.25)
-            ax[fr_id].fill_betweenx(y=[0, np.max(g_hat)+1], x1=fc_crit, x2=fs//2, color='gray', alpha=0.1)
-            ax[psd_id].fill_betweenx(y=[0, np.max(psd)+1], x1=0, x2=fc_crit, color='gray', alpha=0.25)
-            ax[psd_id].fill_betweenx(y=[0, np.max(psd)+1], x1=fc_crit, x2=fs//2, color='gray', alpha=0.1)
+            ax[fr_id].fill_betweenx(y=[0, np.max(g_hat)*1.1], x1=0, x2=fc_crit, color='gray', alpha=0.25)
+            ax[fr_id].fill_betweenx(y=[0, np.max(g_hat)*1.1], x1=fc_crit, x2=fs//2, color='gray', alpha=0.1)
+            ax[psd_id].fill_betweenx(y=[0, np.max(psd)*1.1], x1=0, x2=fc_crit, color='gray', alpha=0.25)
+            ax[psd_id].fill_betweenx(y=[0, np.max(psd)*1.1], x1=fc_crit, x2=fs//2, color='gray', alpha=0.1)
 
         ax[scale_id].set_xlim([0, fs//2])
-        ax[scale_id].set_ylim([auds[0]-1, auds[-1]+1])
+        ax[scale_id].set_ylim([auds[0]-1, auds[-1]*1.1])
         #ax[scale_id].set_xlabel("Frequency (Hz)")
         text_x = fc_crit / 2
         text_y = auds[-1] - 2
@@ -611,7 +609,7 @@ def plot_response(g, fs, scale=False, fc_crit=None, decoder=False):
     
     f_range = np.linspace(0, fs//2, fs//2)
     ax[fr_id].set_xlim([0, fs//2])
-    ax[fr_id].set_ylim([0, np.max(g_hat)+1])
+    ax[fr_id].set_ylim([0, np.max(g_hat)*1.1])
     ax[fr_id].plot(f_range, g_hat.T)
     if decoder:
         ax[fr_id].set_title('Frequency responses of the synthesis filters')
@@ -622,7 +620,7 @@ def plot_response(g, fs, scale=False, fc_crit=None, decoder=False):
 
     ax[psd_id].plot(f_range, psd)
     ax[psd_id].set_xlim([0, fs//2])
-    ax[psd_id].set_ylim([0, np.max(psd)+1])
+    ax[psd_id].set_ylim([0, np.max(psd)*1.1])
     ax[psd_id].set_title('Power spectral density')
     ax[psd_id].set_xlabel('Frequency [Hz]')
     ax[psd_id].set_ylabel('Magnitude')
