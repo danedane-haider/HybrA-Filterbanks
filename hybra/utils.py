@@ -21,7 +21,7 @@ def condition_number(w_hat:torch.Tensor, D:int) -> torch.Tensor:
     else:    
         N = w_hat.shape[0]
         J = w_hat.shape[1]
-        assert N % int(D) == 0, "Oh no! Decimation factor must divide signal length!"
+        assert N % D == 0, "Oh no! Decimation factor must divide signal length!"
 
         A = torch.tensor([torch.inf]).to(w_hat.device)
         B = torch.tensor([0]).to(w_hat.device)
@@ -61,7 +61,7 @@ def can_tight(w:torch.Tensor, D:int) -> torch.Tensor:
     else:
         N = w_hat.shape[0]
         J = w_hat.shape[1]
-        assert N % int(D) == 0, "Oh no! Decimation factor must divide signal length!"
+        assert N % D == 0, "Oh no! Decimation factor must divide signal length!"
 
         w_hat_tight = torch.zeros(J, N, dtype=torch.complex64)
         for j in range(N//D):
@@ -571,46 +571,37 @@ def plot_response(g, fs, scale=False, fc_crit=None, decoder=False):
     psd = np.sum(g_hat, axis=0)
 
     if scale:
-        fig, ax = plt.subplots(3, 1, figsize=(12, 8), sharex=True)
-
-        scale_id = 0
-        fr_id = 1
-        psd_id = 2
-
+        plt.figure(figsize=(8, 2.5))
         freq_samples, aud_samples = audspace_mod(fc_crit, fs, num_channels)
         freqs = np.linspace(0, fs//2, fs//2)
 
         auds = freqtoaud_mod(freqs, fc_crit)
 
-        ax[scale_id].scatter(freq_samples, freqtoaud_mod(freq_samples, fc_crit), color="black", label="Center frequencies", linewidths = 0.05)
-        ax[scale_id].plot(freqs, auds, color='black')
+        plt.scatter(freq_samples, freqtoaud_mod(freq_samples, fc_crit), color="black", label="Center frequencies", linewidths = 0.05)
+        plt.plot(freqs, auds, color='black')
 
         if fc_crit is not None:
-            ax[scale_id].axvline(fc_crit, color='salmon', linestyle='--', label="Transition frequency", alpha=0.5)
-            ax[scale_id].fill_betweenx(y=[auds[0]-1, auds[-1]*1.1], x1=0, x2=fc_crit, color='gray', alpha=0.25)
-            ax[scale_id].fill_betweenx(y=[auds[0]-1, auds[-1]*1.1], x1=fc_crit, x2=fs//2, color='gray', alpha=0.1)
+            plt.axvline(fc_crit, color='salmon', linestyle='--', label="Transition frequency", alpha=0.5)
+            plt.fill_betweenx(y=[auds[0]-1, auds[-1]*1.1], x1=0, x2=fc_crit, color='gray', alpha=0.25)
+            plt.fill_betweenx(y=[auds[0]-1, auds[-1]*1.1], x1=fc_crit, x2=fs//2, color='gray', alpha=0.1)
 
-            ax[fr_id].fill_betweenx(y=[0, np.max(g_hat)*1.1], x1=0, x2=fc_crit, color='gray', alpha=0.25)
-            ax[fr_id].fill_betweenx(y=[0, np.max(g_hat)*1.1], x1=fc_crit, x2=fs//2, color='gray', alpha=0.1)
-            ax[psd_id].fill_betweenx(y=[0, np.max(psd)*1.1], x1=0, x2=fc_crit, color='gray', alpha=0.25)
-            ax[psd_id].fill_betweenx(y=[0, np.max(psd)*1.1], x1=fc_crit, x2=fs//2, color='gray', alpha=0.1)
-
-        ax[scale_id].set_xlim([0, fs//2])
-        ax[scale_id].set_ylim([auds[0]-1, auds[-1]*1.1])
-        #ax[scale_id].set_xlabel("Frequency (Hz)")
+        plt.xlim([0, fs//2])
+        plt.ylim([auds[0]-1, auds[-1]*1.1])
+        plt.xlabel("Frequency (Hz)")
         text_x = fc_crit / 2
         text_y = auds[-1] - 2
-        ax[scale_id].text(text_x, text_y, 'linear', color='black', ha='center', va='center', fontsize=12, alpha=0.75)
-        ax[scale_id].text(text_x + fc_crit - 1, text_y, 'ERB', color='black', ha='center', va='center', fontsize=12, alpha=0.75)
-        ax[scale_id].set_title(f"Modified Auditory Scale for {num_channels} filters of length {filter_length}")
-        ax[scale_id].set_ylabel("Auditory Units")
-        ax[scale_id].legend(loc='lower right')
+        plt.text(text_x, text_y, 'linear', color='black', ha='center', va='center', fontsize=12, alpha=0.75)
+        plt.text(text_x + fc_crit - 1, text_y, 'ERB', color='black', ha='center', va='center', fontsize=12, alpha=0.75)
+        plt.title(f"Modified Auditory Scale for {num_channels} filters of length {filter_length}")
+        plt.ylabel("Auditory Units")
+        plt.legend(loc='lower right')
+        plt.tight_layout()
+        plt.show()
 
-    else:
-        fig, ax = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
+    fig, ax = plt.subplots(2, 1, figsize=(8, 4), sharex=True)
 
-        fr_id = 0
-        psd_id = 1
+    fr_id = 0
+    psd_id = 1
     
     f_range = np.linspace(0, fs//2, fs//2)
     ax[fr_id].set_xlim([0, fs//2])
@@ -630,6 +621,13 @@ def plot_response(g, fs, scale=False, fc_crit=None, decoder=False):
     ax[psd_id].set_xlabel('Frequency [Hz]')
     ax[psd_id].set_ylabel('Magnitude')
 
+    if fc_crit is not None:
+        ax[fr_id].fill_betweenx(y=[0, np.max(g_hat)*1.1], x1=0, x2=fc_crit, color='gray', alpha=0.25)
+        ax[fr_id].fill_betweenx(y=[0, np.max(g_hat)*1.1], x1=fc_crit, x2=fs//2, color='gray', alpha=0.1)
+        ax[psd_id].fill_betweenx(y=[0, np.max(psd)*1.1], x1=0, x2=fc_crit, color='gray', alpha=0.25)
+        ax[psd_id].fill_betweenx(y=[0, np.max(psd)*1.1], x1=fc_crit, x2=fs//2, color='gray', alpha=0.1)
+
+    plt.tight_layout()
     plt.show()
 
 def plot_coefficients(coefficients, fc, L, fs):

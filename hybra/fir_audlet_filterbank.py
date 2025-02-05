@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from hybra.utils import audfilters_fir
 from hybra.utils import plot_response as plot_response_
 from hybra.utils import plot_coefficients as plot_coefficients_
+from hybra.utils import calculate_condition_number
 from hybra._fit_neurodual import fit
 
 class AudletFIR(nn.Module):
@@ -26,7 +27,7 @@ class AudletFIR(nn.Module):
         self.fs = filterbank_config['fs']
         self.fc = fc
         self.fc_crit = fc_crit
-        self.Ls = filterbank_config['Ls']
+        self.Ls = L#filterbank_config['Ls']
 
         kernels_real = torch.tensor(filters.real, dtype=torch.float32)
         kernels_imag = torch.tensor(filters.imag, dtype=torch.float32)
@@ -100,3 +101,10 @@ class AudletFIR(nn.Module):
         with torch.no_grad():
             coefficients = torch.log10(torch.abs(self.forward(x)[0]**2))
         plot_coefficients_(coefficients, self.fc, self.Ls, self.fs)
+
+    @property
+    def condition_number(self):
+        filters = (self.kernels_real + 1j*self.kernels_imag).squeeze()
+        # pad with zeros to have length Ls
+        filters = F.pad(filters, (0, self.Ls - filters.shape[-1]), mode='constant', value=0)
+        return calculate_condition_number(filters, int(self.stride))
