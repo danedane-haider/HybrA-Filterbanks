@@ -10,7 +10,8 @@ class AudSpec(nn.Module):
                                           'fs':16000,
                                           'Ls':16000,
                                           'bwmul':1},
-                                          is_encoder_learnable=False):
+                                          is_encoder_learnable=False,
+                                          is_averaging_kernel_learnable=False):
         super().__init__()
 
         [filters, d, fc, fc_crit, L] = audfilters_fir(**filterbank_config)
@@ -36,6 +37,11 @@ class AudSpec(nn.Module):
             self.register_buffer('kernels_real', kernels_real)
             self.register_buffer('kernels_imag', kernels_imag)
 
+        if is_averaging_kernel_learnable:
+            self.register_parameter('averaging_kernel', nn.Parameter(torch.ones([self.num_channels,1,self.time_avg]), requires_grad=True))
+        else:
+            self.register_buffer('averaging_kernel', torch.ones([self.num_channels,1,self.time_avg]))
+
     def forward(self, x):
         x = F.conv1d(
             F.pad(x, (self.filter_len//2, self.filter_len//2), mode='circular'),
@@ -48,7 +54,7 @@ class AudSpec(nn.Module):
         )**2
         output = F.conv1d(
             x,
-            torch.ones([self.num_channels,1,self.time_avg]).to(x.device),
+            self.averaging_kernel.to(x.device),
             groups=self.num_channels,
             stride=self.time_avg_stride
         )
