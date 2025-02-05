@@ -520,8 +520,8 @@ def audfilters_fir(filter_len, num_channels, fs, Ls, bwmul=1, scale='erb'):
 
     g = np.zeros((num_channels, filter_len), dtype=np.complex128)
 
-    g[0,:] = np.sqrt(d) * firwin(filter_len) #/ np.sqrt(2)
-    g[-1,:] = np.sqrt(d) * modulate(firwin(tsupp[-1], filter_len), fs//2, fs) #/ np.sqrt(2)
+    g[0,:] = np.sqrt(d) * firwin(filter_len) / np.sqrt(2)
+    g[-1,:] = np.sqrt(d) * modulate(firwin(tsupp[-1], filter_len), fs//2, fs) / np.sqrt(2)
 
     for m in range(1, num_channels - 1):
         g[m,:] = np.sqrt(d) * modulate(firwin(tsupp[m], filter_len), fc[m], fs)
@@ -544,7 +544,10 @@ def response(g, fs):
     Lg = g.shape[-1]
     num_channels = g.shape[0]
     g_long = np.concatenate([g, np.zeros((num_channels, int(fs) - Lg))], axis=1)
-    G = np.abs(np.fft.fft(g_long, axis=1)[:,:fs//2])**2
+    # filters with negative frequencies
+    g_neg = np.conj(g_long)
+    g_full = np.concatenate([g_long, g_neg], axis=0)
+    G = np.abs(np.fft.fft(g_full, axis=1)[:,:fs//2])**2
 
     return G
 
@@ -560,7 +563,11 @@ def plot_response(g, fs, scale=False, fc_crit=None, decoder=False):
         fc_high (numpy.Array): Center frequencies of the high-pass filters.
         ind_crit (int): Index of the critical filter.
     """
+    num_channels = g.shape[0]
+    filter_length = g.shape[1]
+
     g_hat = response(g, fs)
+    g_hat_pos = g_hat[:num_channels,:]
     psd = np.sum(g_hat, axis=0)
 
     if scale:
@@ -570,8 +577,6 @@ def plot_response(g, fs, scale=False, fc_crit=None, decoder=False):
         fr_id = 1
         psd_id = 2
 
-        num_channels = g.shape[0]
-        filter_length = g.shape[1]
         freq_samples, aud_samples = audspace_mod(fc_crit, fs, num_channels)
         freqs = np.linspace(0, fs//2, fs//2)
 
@@ -609,8 +614,8 @@ def plot_response(g, fs, scale=False, fc_crit=None, decoder=False):
     
     f_range = np.linspace(0, fs//2, fs//2)
     ax[fr_id].set_xlim([0, fs//2])
-    ax[fr_id].set_ylim([0, np.max(g_hat)*1.1])
-    ax[fr_id].plot(f_range, g_hat.T)
+    ax[fr_id].set_ylim([0, np.max(g_hat_pos)*1.1])
+    ax[fr_id].plot(f_range, g_hat_pos.T)
     if decoder:
         ax[fr_id].set_title('Frequency responses of the synthesis filters')
     if not decoder:

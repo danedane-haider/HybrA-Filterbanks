@@ -18,9 +18,11 @@ class MSETight(torch.nn.Module):
         Lg = w.shape[-1]
         num_channels = w.shape[0]
         w_long = torch.concatenate([w, torch.zeros((num_channels, self.fs - Lg))], axis=1)
-        w_hat = torch.sum(torch.abs(torch.fft.fft(w_long, dim=1)[:, :self.fs//2])**2, dim=0)
+        w_neg = torch.conj(w_long)
+        w_full = torch.concatenate([w_long, w_neg], dim=0)
+        w_hat = torch.sum(torch.abs(torch.fft.fft(w_full, dim=1)[:, :self.fs//2])**2, dim=0)
         kappa = w_hat.max() / w_hat.min()
-        
+
         return loss, loss + self.beta * (kappa - 1), kappa.item()
 
 def noise_uniform(dur=1, fs=16000):
