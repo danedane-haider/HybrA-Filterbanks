@@ -23,6 +23,9 @@ class AudSpec(nn.Module):
         self.fc_crit = fc_crit
         self.num_channels = filterbank_config['num_channels']
 
+        self.time_avg = self.filter_len // self.stride
+        self.time_avg_stride = self.time_avg // 2
+
         kernels_real = torch.tensor(filters.real, dtype=torch.float32)
         kernels_imag = torch.tensor(filters.imag, dtype=torch.float32)
 
@@ -43,11 +46,11 @@ class AudSpec(nn.Module):
             self.kernels_imag.unsqueeze(1),
             stride=self.stride,
         )**2
-        
         output = F.conv1d(
             x,
-            self.kernels_real[0,:].repeat(self.num_channels,1).to(x.device).unsqueeze(1),
-            groups=self.num_channels
+            torch.ones([self.num_channels,1,self.time_avg]).to(x.device),
+            groups=self.num_channels,
+            stride=self.time_avg_stride
         )
 
         return output
