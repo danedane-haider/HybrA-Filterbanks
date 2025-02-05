@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from hybra.utils import audfilters_fir, fir_tightener3000
+from hybra.utils import audfilters_fir
 from hybra.utils import plot_response as plot_response_
+from hybra.utils import plot_coefficients as plot_coefficients_
 from hybra._fit_neurodual import fit
 
 class AudletFIR(nn.Module):
@@ -25,6 +26,7 @@ class AudletFIR(nn.Module):
         self.fs = filterbank_config['fs']
         self.fc = fc
         self.fc_crit = fc_crit
+        self.Ls = filterbank_config['Ls']
 
         kernels_real = torch.tensor(filters.real, dtype=torch.float32)
         kernels_imag = torch.tensor(filters.imag, dtype=torch.float32)
@@ -93,3 +95,8 @@ class AudletFIR(nn.Module):
             plot_response_(g=(self.decoder_kernels_real+1j*self.decoder_kernels_imag).detach().numpy(), fs=self.fs, decoder=True)
         else:
             raise NotImplementedError("No decoder configured")
+
+    def plot_coefficients(self, x):
+        with torch.no_grad():
+            coefficients = torch.log10(torch.abs(self.forward(x)[0]**2))
+        plot_coefficients_(coefficients, self.fc, self.Ls, self.fs)

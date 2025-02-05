@@ -631,3 +631,20 @@ def plot_response(g, fs, scale=False, fc_crit=None, decoder=False):
     ax[psd_id].set_ylabel('Magnitude')
 
     plt.show()
+
+def plot_coefficients(coefficients, fc, L, fs):
+    fig, ax = plt.subplots()
+    ax.pcolor(coefficients)#, origin='lower', aspect='auto')
+
+    locs, labels = plt.yticks()
+    ax.set_yticks(locs[1:-1], [int(np.round(y, 0)) for y in fc[[int(x) for x in locs[1:-1]]]])
+
+    locs, labels = plt.yticks()
+    ax.set_xticks(np.linspace(0, coefficients.shape[-1], len(locs)-2))
+    ax.set_xticklabels([np.round(x, 1) for x in np.linspace(0, L/fs, len(locs)-2)])
+
+    ax.set_title('Filterbank coefficients')
+    ax.set_ylabel('Frequency [Hz]')
+    ax.set_xlabel('Time [s]')
+    
+    plt.show()

@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from hybra.utils import audfilters_fir
 from hybra.utils import plot_response as plot_response_
+from hybra.utils import plot_coefficients as plot_coefficients_
 
 class AudSpec(nn.Module):
     def __init__(self, filterbank_config={'filter_len':256,
@@ -23,6 +24,7 @@ class AudSpec(nn.Module):
         self.fc = fc
         self.fc_crit = fc_crit
         self.num_channels = filterbank_config['num_channels']
+        self.Ls = filterbank_config['Ls']
 
         self.time_avg = self.filter_len // self.stride
         self.time_avg_stride = self.time_avg // 2
@@ -60,6 +62,11 @@ class AudSpec(nn.Module):
         )
 
         return output
+
+    def plot_coefficients(self, x):
+        with torch.no_grad():
+            coefficients = self.forward(x)
+        plot_coefficients_(coefficients, self.fc, self.Ls, self.fs)
 
     def plot_response(self):
         plot_response_(g=(self.kernels_real + 1j*self.kernels_imag).detach().numpy(), fs=self.fs, scale=True, fc_crit=self.fc_crit)
