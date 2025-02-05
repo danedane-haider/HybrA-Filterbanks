@@ -12,7 +12,8 @@ class AudSpec(nn.Module):
                                           'Ls':16000,
                                           'bwmul':1},
                                           is_encoder_learnable=False,
-                                          is_averaging_kernel_learnable=False):
+                                          is_averaging_kernel_learnable=False,
+                                          is_log=False):
         super().__init__()
 
         [filters, d, fc, fc_crit, L] = audfilters_fir(**filterbank_config)
@@ -31,6 +32,8 @@ class AudSpec(nn.Module):
 
         kernels_real = torch.tensor(filters.real, dtype=torch.float32)
         kernels_imag = torch.tensor(filters.imag, dtype=torch.float32)
+
+        self.is_log = is_log
 
         if is_encoder_learnable:
             self.register_parameter('kernels_real', nn.Parameter(kernels_real, requires_grad=True))
@@ -60,6 +63,9 @@ class AudSpec(nn.Module):
             groups=self.num_channels,
             stride=self.time_avg_stride
         )
+
+        if self.is_log:
+            output = torch.log10(output)
 
         return output
 
