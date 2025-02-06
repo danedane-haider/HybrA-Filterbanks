@@ -501,13 +501,16 @@ def audfilters_fir(filter_len, num_channels, fs, Ls, bwmul=1, scale='erb'):
     # Frequency and time supports
     ####################################################################################################
 
-    # frequency support for the auditory part
-    fsupp = fctobw(fc[num_lin:]) / bw_conversion * bwmul
-
     # time support for the auditory part
     tsupp_lin = (np.ones(num_lin) * filter_len).astype(int)
-    tsupp_aud = (np.round(bw_conversion / fsupp * weird_factor)).astype(int)
-    tsupp = np.concatenate([tsupp_lin, tsupp_aud])
+    # frequency support for the auditory part
+    if num_lin == num_channels:
+        fsupp = fctobw(fs//2) / bw_conversion * bwmul
+        tsupp = tsupp_lin
+    else:
+        fsupp = fctobw(fc[num_lin:]) / bw_conversion * bwmul
+        tsupp_aud = (np.round(bw_conversion / fsupp * weird_factor)).astype(int)
+        tsupp = np.concatenate([tsupp_lin, tsupp_aud])
 
     # Maximal decimation factor (stride) to get a nice frame and accoring signal length
     d = np.floor(np.min(fs / fsupp)).astype(int)
