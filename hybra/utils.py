@@ -493,9 +493,8 @@ def audfilters_fir(filter_len, num_channels, fs, Ls, bwmul=1, scale='erb'):
     # get the bandwidth for the maximum admissible filter length and the associated center frequency
     fsupp_crit = bw_conversion / filter_len * weird_factor
     fc_crit = bwtofc(fsupp_crit / bwmul * bw_conversion)
-    fc_crit_aud = audtofreq(fc_crit)
 
-    [fc, fc_aud] = audspace_mod(fc_crit, fs, num_channels)
+    [fc, _] = audspace_mod(fc_crit, fs, num_channels)
     num_lin = np.where(fc < fc_crit)[0].shape[0]
 
     ####################################################################################################
