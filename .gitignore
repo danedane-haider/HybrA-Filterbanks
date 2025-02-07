@@ -152,3 +152,5 @@ uv.lock
 test.py
 bw.py
 audio/
+
+plot_spec.py
