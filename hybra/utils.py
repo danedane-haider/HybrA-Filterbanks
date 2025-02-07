@@ -513,7 +513,7 @@ def audfilters_fir(filter_len, num_channels, fs, Ls, bwmul=1, scale='erb'):
         tsupp = np.concatenate([tsupp_lin, tsupp_aud])
 
     # Maximal decimation factor (stride) to get a nice frame and accoring signal length
-    d = np.floor(np.min(fs / fsupp)).astype(int)
+    d = np.floor(np.min(fs / fsupp)).astype(int) * 4
     L = int(np.ceil(Ls / d) * d)
 
     ####################################################################################################

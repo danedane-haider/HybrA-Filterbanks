@@ -5,7 +5,7 @@ from hybra.utils import audfilters_fir
 from hybra.utils import plot_response as plot_response_
 from hybra.utils import plot_coefficients as plot_coefficients_
 
-class AudSpec(nn.Module):
+class ISACSpec(nn.Module):
     def __init__(self, filterbank_config={'filter_len':256,
                                           'num_channels':42,
                                           'fs':16000,

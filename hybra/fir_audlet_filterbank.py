@@ -7,7 +7,7 @@ from hybra.utils import plot_coefficients as plot_coefficients_
 from hybra.utils import calculate_condition_number
 from hybra._fit_neurodual import fit
 
-class AudletFIR(nn.Module):
+class ISAC(nn.Module):
     def __init__(self, filterbank_config={'filter_len':256,
                                           'num_channels':64,
                                           'fs':16000,

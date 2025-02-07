@@ -38,7 +38,7 @@ def noise_uniform(dur=1, fs=16000):
     
     return x.unsqueeze(0)
 
-class NeuroDual(nn.Module):
+class ISACDual(nn.Module):
 	def __init__(self, filterbank_config):
 		super().__init__()
 		
@@ -87,7 +87,7 @@ class NeuroDual(nn.Module):
 		return x
 
 def fit(filterbank_config, eps_loss, max_iter):
-	model = NeuroDual(filterbank_config=filterbank_config)
+	model = ISACDual(filterbank_config=filterbank_config)
 	optimizer = optim.Adam(model.parameters(), lr=5e-4)
 	criterion = MSETight(beta=1e-8)
 
