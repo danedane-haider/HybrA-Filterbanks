@@ -573,7 +573,7 @@ def plot_response(g, fs, scale=False, fc_crit=None, decoder=False):
     psd = np.sum(g_hat, axis=0)
 
     if scale:
-        plt.figure(figsize=(8, 2.5))
+        plt.figure(figsize=(8, 2))
         freq_samples, aud_samples = audspace_mod(fc_crit, fs, num_channels)
         freqs = np.linspace(0, fs//2, fs//2)
 
@@ -583,7 +583,7 @@ def plot_response(g, fs, scale=False, fc_crit=None, decoder=False):
         plt.plot(freqs, auds, color='black')
 
         if fc_crit is not None:
-            plt.axvline(fc_crit, color='salmon', linestyle='--', label="Transition frequency", alpha=0.5)
+            plt.axvline(fc_crit, color='black', linestyle='--', label="Transition frequency", alpha=0.5)
             plt.fill_betweenx(y=[auds[0]-1, auds[-1]*1.1], x1=0, x2=fc_crit, color='gray', alpha=0.25)
             plt.fill_betweenx(y=[auds[0]-1, auds[-1]*1.1], x1=fc_crit, x2=fs//2, color='gray', alpha=0.1)
 
@@ -591,10 +591,10 @@ def plot_response(g, fs, scale=False, fc_crit=None, decoder=False):
         plt.ylim([auds[0]-1, auds[-1]*1.1])
         plt.xlabel("Frequency (Hz)")
         text_x = fc_crit / 2
-        text_y = auds[-1] - 2
+        text_y = auds[-1] 
         plt.text(text_x, text_y, 'linear', color='black', ha='center', va='center', fontsize=12, alpha=0.75)
         plt.text(text_x + fc_crit - 1, text_y, 'ERB', color='black', ha='center', va='center', fontsize=12, alpha=0.75)
-        plt.title(f"Modified Auditory Scale for {num_channels} filters of length {filter_length}")
+        plt.title(f"Modified frequency Scale for {num_channels} filters of length {filter_length}")
         plt.ylabel("Auditory Units")
         plt.legend(loc='lower right')
         plt.tight_layout()
@@ -610,16 +610,16 @@ def plot_response(g, fs, scale=False, fc_crit=None, decoder=False):
     ax[fr_id].set_ylim([0, np.max(g_hat_pos)*1.1])
     ax[fr_id].plot(f_range, g_hat_pos.T)
     if decoder:
-        ax[fr_id].set_title('Frequency responses of the synthesis filters')
+        ax[fr_id].set_title('PSDs of the synthesis filters')
     if not decoder:
-        ax[fr_id].set_title('Frequency responses of the analysis filters')
+        ax[fr_id].set_title('PSDs of the analysis filters')
     #ax[fr_id].set_xlabel('Frequency [Hz]')
     ax[fr_id].set_ylabel('Magnitude')
 
     ax[psd_id].plot(f_range, psd)
     ax[psd_id].set_xlim([0, fs//2])
     ax[psd_id].set_ylim([0, np.max(psd)*1.1])
-    ax[psd_id].set_title('Power spectral density')
+    ax[psd_id].set_title('Total PSD')
     ax[psd_id].set_xlabel('Frequency [Hz]')
     ax[psd_id].set_ylabel('Magnitude')
 
@@ -646,5 +646,5 @@ def plot_coefficients(coefficients, fc, L, fs):
     ax.set_title('Filterbank coefficients')
     ax.set_ylabel('Frequency [Hz]')
     ax.set_xlabel('Time [s]')
-    
+    plt.tight_layout()
     plt.show()

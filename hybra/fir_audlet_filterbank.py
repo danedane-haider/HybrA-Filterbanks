@@ -105,6 +105,11 @@ class AudletFIR(nn.Module):
     @property
     def condition_number(self):
         filters = (self.kernels_real + 1j*self.kernels_imag).squeeze()
-        # pad with zeros to have length Ls
+        filters = F.pad(filters, (0, self.Ls - filters.shape[-1]), mode='constant', value=0)
+        return calculate_condition_number(filters, int(self.stride))
+    
+    @property
+    def condition_number_decoder(self):
+        filters = (self.decoder_kernels_real + 1j*self.decoder_kernels_imag).squeeze()
         filters = F.pad(filters, (0, self.Ls - filters.shape[-1]), mode='constant', value=0)
         return calculate_condition_number(filters, int(self.stride))
