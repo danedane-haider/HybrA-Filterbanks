@@ -513,7 +513,7 @@ def audfilters_fir(filter_len, num_channels, fs, Ls, bwmul=1, scale='erb'):
         tsupp = np.concatenate([tsupp_lin, tsupp_aud])
 
     # Maximal decimation factor (stride) to get a nice frame and accoring signal length
-    d = np.floor(np.min(fs / fsupp)).astype(int) * 4
+    d = np.floor(np.min(fs / fsupp)).astype(int)
     L = int(np.ceil(Ls / d) * d)
 
     ####################################################################################################
@@ -600,7 +600,7 @@ def plot_response(g, fs, scale=False, fc_crit=None, decoder=False):
         plt.tight_layout()
         plt.show()
 
-    fig, ax = plt.subplots(2, 1, figsize=(8, 4), sharex=True)
+    fig, ax = plt.subplots(2, 1, figsize=(6, 3), sharex=True)
 
     fr_id = 0
     psd_id = 1
