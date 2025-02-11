@@ -89,18 +89,18 @@ class ISAC(nn.Module):
         return x.squeeze(1)
 
     def plot_response(self):
-        plot_response_(g=(self.kernels_real + 1j*self.kernels_imag).detach().numpy(), fs=self.fs, scale=True, fc_crit=self.fc_crit)
+        plot_response_(g=(self.kernels_real + 1j*self.kernels_imag).cpu().detach().numpy(), fs=self.fs, scale=True, fc_crit=self.fc_crit)
 
     def plot_decoder_response(self):
         if self.use_decoder:
-            plot_response_(g=(self.decoder_kernels_real+1j*self.decoder_kernels_imag).detach().numpy(), fs=self.fs, decoder=True)
+            plot_response_(g=(self.decoder_kernels_real+1j*self.decoder_kernels_imag).cpu().detach().numpy(), fs=self.fs, decoder=True)
         else:
             raise NotImplementedError("No decoder configured")
 
     def plot_coefficients(self, x):
         with torch.no_grad():
             coefficients = torch.log10(torch.abs(self.forward(x)[0]**2))
-        plot_coefficients_(coefficients, self.fc, self.Ls, self.fs)
+        plot_coefficients_(coefficients.cpu(), self.fc, self.Ls, self.fs)
 
     @property
     def condition_number(self):

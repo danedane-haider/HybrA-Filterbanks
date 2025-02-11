@@ -18,7 +18,7 @@ def modulate(g, fc, fs):
         g_mod (list of torch.Tensor): Modulated filters.
     """
     Lg = len(g)
-    g_mod = g * torch.exp(2 * torch.pi * 1j * fc * torch.arange(Lg) / fs)
+    g_mod = g * torch.exp(2 * torch.pi * 1j * fc.to('cpu') * torch.arange(Lg) / fs)
     return g_mod
 
 def fctobw(fc):
@@ -153,7 +153,7 @@ class ModAudletFIR(nn.Module):
         else:
             fsupp = fctobw(self.fc[num_lin:]) / bw_conversion * self.bwmul
             tsupp_aud = (torch.round(bw_conversion / fsupp * weird_factor)).int()
-            tsupp = torch.concatenate([tsupp_lin, tsupp_aud])
+            tsupp = torch.concatenate([tsupp_lin.to(x.device), tsupp_aud])
 
         # Maximal decimation factor (stride) to get a nice frame and accoring signal length
         d = torch.floor(torch.min(self.fs / fsupp)).int()
@@ -164,11 +164,11 @@ class ModAudletFIR(nn.Module):
 
         g = torch.zeros((self.num_channels, self.filter_len), dtype=torch.complex128)
 
-        g[0,:] = torch.sqrt(d) * firwin(self.filter_len) / torch.sqrt(torch.tensor(2))
-        g[-1,:] = torch.sqrt(d) * modulate(torch.tensor(firwin(tsupp[-1].item(), self.filter_len),dtype=torch.float32), self.fs//2, self.fs) / torch.sqrt(torch.tensor(2))
+        g[0,:] = (torch.sqrt(d) / torch.sqrt(torch.tensor(2))).cpu()* firwin(self.filter_len) 
+        g[-1,:] = (torch.sqrt(d) / torch.sqrt(torch.tensor(2))).cpu() * modulate(torch.tensor(firwin(tsupp[-1].item(), self.filter_len),dtype=torch.float32), torch.tensor(self.fs//2).to(x.device), self.fs)
 
         for m in range(1, self.num_channels - 1):
-            g[m,:] = torch.sqrt(d) * modulate(torch.tensor(firwin(tsupp[m].item(), self.filter_len), dtype=torch.float32), self.fc[m], self.fs)
+            g[m,:] = torch.sqrt(d).cpu() * modulate(torch.tensor(firwin(tsupp[m].item(), self.filter_len), dtype=torch.float32), self.fc[m], self.fs)
 
         if self.is_hybra:
             self.kernels_real = F.conv1d(
@@ -200,12 +200,12 @@ class ModAudletFIR(nn.Module):
         return out_real + 1j * out_imag
 
     def plot_response(self):
-        plot_response_(g=(self.kernels_real + 1j*self.kernels_imag).detach().numpy(), fs=self.fs, scale=True, fc_crit=self.fc_crit.numpy())
+        plot_response_(g=(self.kernels_real + 1j*self.kernels_imag).cpu().detach().numpy(), fs=self.fs, scale=True, fc_crit=self.fc_crit.numpy())
 
     def plot_coefficients(self, x):
         with torch.no_grad():
             coefficients = torch.log10(torch.abs(self.forward(x)[0]**2))
-        plot_coefficients_(coefficients.detach().numpy(), self.fc.detach().numpy(), self.Ls, self.fs)
+        plot_coefficients_(coefficients.cpu().detach().numpy(), self.fc.cpu().detach().numpy(), self.Ls, self.fs)
 
     @property
     def condition_number(self):
