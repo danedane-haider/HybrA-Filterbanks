@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from hybra.utils import audfilters_fir
 from hybra.utils import plot_response as plot_response_
 from hybra.utils import plot_coefficients as plot_coefficients_
-from hybra.utils import calculate_condition_number, firwin
+from hybra.utils import calculate_condition_number, firwin, fir_tightener3000
 
 def modulate(g, fc, fs):
     """Modulate a filters.
@@ -84,7 +84,9 @@ class ModAudletFIR(nn.Module):
                                           'num_channels':40,
                                           'fs':16000,
                                           'Ls':16000,
-                                          'bwmul':1}):
+                                          'bwmul':1},
+                                          is_hybra=False,
+                                          hybra_kernel_length=24):
         super().__init__()
 
         [filters, d, fc, fc_crit, L] = audfilters_fir(**filterbank_config)
@@ -98,6 +100,19 @@ class ModAudletFIR(nn.Module):
         self.Ls = L
         self.bwmul = filterbank_config['bwmul']
         self.num_channels = filterbank_config['num_channels']
+        
+        self.is_hybra = is_hybra
+        self.kernel_len = hybra_kernel_length
+        if self.is_hybra:        # Initialize trainable filters
+            k = torch.tensor(self.num_channels / (self.kernel_len * self.num_channels))
+            encoder_weight = (-torch.sqrt(k) - torch.sqrt(k)) * torch.rand([self.num_channels, 1, self.kernel_len]) + torch.sqrt(k)
+
+            encoder_weight = torch.tensor(fir_tightener3000(
+                encoder_weight.squeeze(1), self.kernel_len, D=d, eps=1.01
+            ),  dtype=torch.float32).unsqueeze(1)
+            encoder_weight = encoder_weight / torch.norm(encoder_weight, dim=-1, keepdim=True)
+            self.register_parameter('hybra_kernels_real', nn.Parameter(encoder_weight, requires_grad=True))
+            self.register_parameter('hybra_kernels_imag', nn.Parameter(encoder_weight, requires_grad=True))
 
     def forward(self, x):
 
@@ -155,8 +170,24 @@ class ModAudletFIR(nn.Module):
         for m in range(1, self.num_channels - 1):
             g[m,:] = torch.sqrt(d) * modulate(torch.tensor(firwin(tsupp[m].item(), self.filter_len), dtype=torch.float32), self.fc[m], self.fs)
 
-        self.kernels_real = g.real.float()
-        self.kernels_imag = g.imag.float()
+        if self.is_hybra:
+            self.kernels_real = F.conv1d(
+                g.real.float().to(x.device).squeeze(1),
+                self.hybra_kernels_real,
+                groups=self.num_channels,
+                padding="same",
+            )
+
+            self.kernels_imag  = F.conv1d(
+                g.imag.float().to(x.device).squeeze(1),
+                self.hybra_kernels_imag,
+                groups=self.num_channels,
+                padding="same",
+            )
+
+        else:
+            self.kernels_real = g.real.float()
+            self.kernels_imag = g.imag.float()
 
 
         x = F.pad(x.unsqueeze(1), (self.filter_len//2, self.filter_len//2), mode='circular')
