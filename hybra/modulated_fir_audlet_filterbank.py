@@ -1,13 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable
 from hybra.utils import audfilters_fir
 from hybra.utils import plot_response as plot_response_
 from hybra.utils import plot_coefficients as plot_coefficients_
 from hybra.utils import calculate_condition_number, firwin
-from hybra._fit_neurodual import fit
-
 
 def modulate(g, fc, fs):
     """Modulate a filters.
@@ -82,38 +79,9 @@ def audtofreq_mod(aud, fc_crit):
 
     return freq
 
-
-def audspace_mod(fc_crit, fs, num_channels):
-    """Generate M frequency samples that are equidistant in the modified auditory scale.
-    
-    Parameters:
-    fc_crit (float): Critical frequency in Hz.
-    fs (int): Sampling rate in Hz.
-    M (int): Number of filters/channels.
-
-    Returns:
-    ndarray: Frequency values in Hz and in the auditory scale.
-    """
-
-    # Convert [0, fs//2] to modified auditory scale
-    aud_min = freqtoaud_mod(torch.tensor([0]), fc_crit)[0]
-    aud_max = freqtoaud_mod(torch.tensor([fs//2]), fc_crit)[0]
-
-    # Generate frequencies spaced evenly on the modified auditory scale
-    fc_aud = Variable(torch.linspace(aud_min, aud_max, num_channels))
-
-    # Convert back to frequency scale
-    fc = audtofreq_mod(fc_aud, fc_crit)
-
-    # Ensure exact endpoints
-    fc[0] = 0
-    fc[-1] = fs//2
-
-    return fc, fc_aud
-
 class ModAudletFIR(nn.Module):
-    def __init__(self, filterbank_config={'filter_len':256,
-                                          'num_channels':64,
+    def __init__(self, filterbank_config={'filter_len':128,
+                                          'num_channels':40,
                                           'fs':16000,
                                           'Ls':16000,
                                           'bwmul':1}):
@@ -125,17 +93,13 @@ class ModAudletFIR(nn.Module):
         self.stride = d
         self.filter_len = filterbank_config['filter_len'] 
         self.fs = filterbank_config['fs']
-        self.fc = fc
+        self.fc = torch.nn.Parameter(torch.tensor(fc, dtype=torch.float32), requires_grad=True)
         self.fc_crit = fc_crit
         self.Ls = L
         self.bwmul = filterbank_config['bwmul']
         self.num_channels = filterbank_config['num_channels']
 
-        self.kernels_real = torch.tensor(filters.real, dtype=torch.float32)
-        self.kernels_imag = torch.tensor(filters.imag, dtype=torch.float32)
-
     def forward(self, x):
-        x = F.pad(x.unsqueeze(1), (self.filter_len//2, self.filter_len//2), mode='circular')
 
         ####################################################################################################
         # Bandwidth conversion
@@ -158,29 +122,26 @@ class ModAudletFIR(nn.Module):
 
         # get the bandwidth for the maximum admissible filter length and the associated center frequency
         fsupp_crit = bw_conversion / self.filter_len * weird_factor
-        fc_crit = bwtofc(fsupp_crit / self.bwmul * bw_conversion)
-
-        [fc, _] = audspace_mod(fc_crit, self.fs, self.num_channels)
-        self.fc = fc
-        num_lin = torch.where(fc < fc_crit)[0].shape[0]
+        self.fc_crit = bwtofc(fsupp_crit / self.bwmul * bw_conversion)
+        num_lin = torch.where(self.fc < self.fc_crit)[0].shape[0]
 
         ####################################################################################################
         # Frequency and time supports
         ####################################################################################################
 
         # time support for the auditory part
-        tsupp_lin = (torch.ones(num_lin) * self.filter_len).astype(int)
+        tsupp_lin = (torch.ones(num_lin) * self.filter_len).int()
         # frequency support for the auditory part
         if num_lin == self.num_channels:
             fsupp = fctobw(self.fs//2) / bw_conversion * self.bwmul
             tsupp = tsupp_lin
         else:
-            fsupp = fctobw(fc[num_lin:]) / bw_conversion * self.bwmul
-            tsupp_aud = (torch.round(bw_conversion / fsupp * weird_factor)).astype(int)
+            fsupp = fctobw(self.fc[num_lin:]) / bw_conversion * self.bwmul
+            tsupp_aud = (torch.round(bw_conversion / fsupp * weird_factor)).int()
             tsupp = torch.concatenate([tsupp_lin, tsupp_aud])
 
         # Maximal decimation factor (stride) to get a nice frame and accoring signal length
-        d = torch.floor(torch.min(self.fs / fsupp)).astype(int)
+        d = torch.floor(torch.min(self.fs / fsupp)).int()
 
         ####################################################################################################
         # Generate filters
@@ -188,21 +149,32 @@ class ModAudletFIR(nn.Module):
 
         g = torch.zeros((self.num_channels, self.filter_len), dtype=torch.complex128)
 
-        g[0,:] = torch.sqrt(d) * firwin(self.filter_len) / torch.sqrt(2)
-        g[-1,:] = torch.sqrt(d) * modulate(firwin(tsupp[-1], self.filter_len), self.fs//2, self.fs) / self.sqrt(2)
+        g[0,:] = torch.sqrt(d) * firwin(self.filter_len) / torch.sqrt(torch.tensor(2))
+        g[-1,:] = torch.sqrt(d) * modulate(torch.tensor(firwin(tsupp[-1].item(), self.filter_len),dtype=torch.float32), self.fs//2, self.fs) / torch.sqrt(torch.tensor(2))
 
         for m in range(1, self.num_channels - 1):
-            g[m,:] = torch.sqrt(d) * modulate(firwin(tsupp[m], self.filter_len), fc[m], self.fs)
+            g[m,:] = torch.sqrt(d) * modulate(torch.tensor(firwin(tsupp[m].item(), self.filter_len), dtype=torch.float32), self.fc[m], self.fs)
+
+        self.kernels_real = g.real.float()
+        self.kernels_imag = g.imag.float()
+
+
+        x = F.pad(x.unsqueeze(1), (self.filter_len//2, self.filter_len//2), mode='circular')
+
+        out_real = F.conv1d(x, self.kernels_real.to(x.device).unsqueeze(1), stride=d.item())
+        out_imag = F.conv1d(x, self.kernels_imag.to(x.device).unsqueeze(1), stride=d.item())
+
+
 
         return out_real + 1j * out_imag
 
     def plot_response(self):
-        plot_response_(g=(self.kernels_real + 1j*self.kernels_imag).detach().numpy(), fs=self.fs, scale=True, fc_crit=self.fc_crit)
+        plot_response_(g=(self.kernels_real + 1j*self.kernels_imag).detach().numpy(), fs=self.fs, scale=True, fc_crit=self.fc_crit.numpy())
 
     def plot_coefficients(self, x):
         with torch.no_grad():
             coefficients = torch.log10(torch.abs(self.forward(x)[0]**2))
-        plot_coefficients_(coefficients, self.fc, self.Ls, self.fs)
+        plot_coefficients_(coefficients.detach().numpy(), self.fc.detach().numpy(), self.Ls, self.fs)
 
     @property
     def condition_number(self):
