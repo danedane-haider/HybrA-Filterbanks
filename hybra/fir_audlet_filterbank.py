@@ -12,7 +12,8 @@ class ISAC(nn.Module):
                                           'num_channels':64,
                                           'fs':16000,
                                           'Ls':16000,
-                                          'bwmul':1},
+                                          'bwmul':1,
+                                          'scale':'erb'},
                                           is_encoder_learnable=False,
                                           use_decoder=False,
                                           is_decoder_learnable=False,
@@ -28,6 +29,7 @@ class ISAC(nn.Module):
         self.fc = fc
         self.fc_crit = fc_crit
         self.Ls = L#filterbank_config['Ls']
+        self.scale = filterbank_config['scale']
 
         kernels_real = torch.tensor(filters.real, dtype=torch.float32)
         kernels_imag = torch.tensor(filters.imag, dtype=torch.float32)
@@ -89,11 +91,11 @@ class ISAC(nn.Module):
         return x.squeeze(1)
 
     def plot_response(self):
-        plot_response_(g=(self.kernels_real + 1j*self.kernels_imag).detach().numpy(), fs=self.fs, scale=True, fc_crit=self.fc_crit)
+        plot_response_(g=(self.kernels_real + 1j*self.kernels_imag).detach().numpy(), fs=self.fs, scale=self.scale, plot_scale=True, fc_crit=self.fc_crit)
 
     def plot_decoder_response(self):
         if self.use_decoder:
-            plot_response_(g=(self.decoder_kernels_real+1j*self.decoder_kernels_imag).detach().numpy(), fs=self.fs, decoder=True)
+            plot_response_(g=(self.decoder_kernels_real+1j*self.decoder_kernels_imag).detach().numpy(), fs=self.fs, scale=self.scale, decoder=True)
         else:
             raise NotImplementedError("No decoder configured")
 

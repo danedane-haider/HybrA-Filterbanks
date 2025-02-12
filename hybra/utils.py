@@ -177,6 +177,10 @@ def freqtoaud(freq, scale="erb"):
     elif scale in ["log10", "semitone"]:
         # Logarithmic scale
         return np.log10(freq)
+    
+    elif scale == "ele":
+        # Elephant scale
+        return 9.2645 * np.sign(freq) * np.log(1 + np.abs(freq) * 0.00437 * 2 ) / 2
 
     else:
         raise ValueError(f"Unsupported scale: '{scale}'. Available options are: 'mel', 'erb', 'bark', 'log10'.")
@@ -197,12 +201,19 @@ def audtofreq(aud, scale="erb"):
     """
     if scale == "mel":
         return 700 * np.sign(aud) * (np.exp(np.abs(aud) * np.log(17 / 7) / 1000) - 1)
+    
     elif scale == "erb":
         return (1 / 0.00437) * (np.exp(aud / 9.2645) - 1)
+    
     elif scale == "bark":
         return np.sign(aud) * 1960 / (26.81 / (np.abs(aud) + 0.53) - 1)
+    
     elif scale in ["log10", "semitone"]:
         return 10 ** aud
+    
+    elif scale == "ele":
+        return (1 / 0.00437 / 2) * (np.exp(aud / 9.2645 * 2) - 1)
+
     else:
         raise ValueError(f"Unsupported scale: '{scale}'. Available options are: 'mel', 'erb', 'bark', 'log10'.")
 
@@ -247,7 +258,7 @@ def audspace(fmin, fmax, num_channels, scale="erb"):
 
     return y
 
-def freqtoaud_mod(freq, fc_crit):
+def freqtoaud_mod(freq, fc_crit, scale="erb"):
     """
     Modified auditory scale function with linear region below fc_crit.
     
@@ -258,19 +269,19 @@ def freqtoaud_mod(freq, fc_crit):
     Returns:
     ndarray: Values on the modified auditory scale.
     """
-    aud_crit = freqtoaud(fc_crit)
-    slope = (freqtoaud(fc_crit * 1.01) - aud_crit) / (fc_crit * 0.01)
+    aud_crit = freqtoaud(fc_crit, scale)
+    slope = (freqtoaud(fc_crit * 1.01, scale) - aud_crit) / (fc_crit * 0.01)
 
     aud = np.zeros_like(freq, dtype=np.float32)
     linear_part = freq < fc_crit
     auditory_part = freq >= fc_crit
 
     aud[linear_part] = slope * (freq[linear_part] - fc_crit) + aud_crit
-    aud[auditory_part] = freqtoaud(freq[auditory_part])
+    aud[auditory_part] = freqtoaud(freq[auditory_part], scale)
 
     return aud
 
-def audtofreq_mod(aud, fc_crit):
+def audtofreq_mod(aud, fc_crit, scale="erb"):
     """
     Inverse of freqtoaud_mod to map auditory scale back to frequency.
     
@@ -281,19 +292,19 @@ def audtofreq_mod(aud, fc_crit):
     Returns:
     ndarray: Frequency values in Hz
     """
-    aud_crit = freqtoaud(fc_crit)
-    slope = (freqtoaud(fc_crit * 1.01) - aud_crit) / (fc_crit * 0.01)
+    aud_crit = freqtoaud(fc_crit, scale)
+    slope = (freqtoaud(fc_crit * 1.01, scale) - aud_crit) / (fc_crit * 0.01)
 
     freq = np.zeros_like(aud, dtype=np.float32)
     linear_part = aud < aud_crit
     auditory_part = aud >= aud_crit
 
     freq[linear_part] = (aud[linear_part] - aud_crit) / slope + fc_crit
-    freq[auditory_part] = audtofreq(aud[auditory_part])
+    freq[auditory_part] = audtofreq(aud[auditory_part], scale)
 
     return freq
 
-def audspace_mod(fc_crit, fs, num_channels):
+def audspace_mod(fc_crit, fs, num_channels, scale):
     """Generate M frequency samples that are equidistant in the modified auditory scale.
     
     Parameters:
@@ -306,14 +317,14 @@ def audspace_mod(fc_crit, fs, num_channels):
     """
 
     # Convert [0, fs//2] to modified auditory scale
-    aud_min = freqtoaud_mod(np.array([0]), fc_crit)[0]
-    aud_max = freqtoaud_mod(np.array([fs//2]), fc_crit)[0]
+    aud_min = freqtoaud_mod(np.array([0]), fc_crit, scale)[0]
+    aud_max = freqtoaud_mod(np.array([fs//2]), fc_crit, scale)[0]
 
     # Generate frequencies spaced evenly on the modified auditory scale
     fc_aud = np.linspace(aud_min, aud_max, num_channels)
 
     # Convert back to frequency scale
-    fc = audtofreq_mod(fc_aud, fc_crit)
+    fc = audtofreq_mod(fc_aud, fc_crit, scale)
 
     # Ensure exact endpoints
     fc[0] = 0
@@ -350,6 +361,8 @@ def fctobw(fc, scale="erb"):
         bw = np.log(17 / 7) * (700 + fc) / 1000
     elif scale in ["log10"]:
         bw = fc
+    elif scale == "ele":
+        bw = 24.7 + fc / 9.265 * 2 # to be continued
     else:
         raise ValueError(f"Unsupported auditory scale: {scale}")
 
@@ -384,6 +397,8 @@ def bwtofc(bw, scale="erb"):
         fc = 1000 * (bw / np.log(17 / 7)) - 700
     elif scale in ["log10"]:
         fc = bw
+    elif scale == "ele":
+        fc = (bw - 24.7) * 9.265 / 2 # to be continued
     else:
         raise ValueError(f"Unsupported auditory scale: {scale}")
 
@@ -494,7 +509,7 @@ def audfilters_fir(filter_len, num_channels, fs, Ls, bwmul=1, scale='erb'):
     fsupp_crit = bw_conversion / filter_len * weird_factor
     fc_crit = bwtofc(fsupp_crit / bwmul * bw_conversion)
 
-    [fc, _] = audspace_mod(fc_crit, fs, num_channels)
+    [fc, _] = audspace_mod(fc_crit, fs, num_channels, scale)
     num_lin = np.where(fc < fc_crit)[0].shape[0]
 
     ####################################################################################################
@@ -505,10 +520,10 @@ def audfilters_fir(filter_len, num_channels, fs, Ls, bwmul=1, scale='erb'):
     tsupp_lin = (np.ones(num_lin) * filter_len).astype(int)
     # frequency support for the auditory part
     if num_lin == num_channels:
-        fsupp = fctobw(fs//2) / bw_conversion * bwmul
+        fsupp = fctobw(fs//2, scale) / bw_conversion * bwmul
         tsupp = tsupp_lin
     else:
-        fsupp = fctobw(fc[num_lin:]) / bw_conversion * bwmul
+        fsupp = fctobw(fc[num_lin:], scale) / bw_conversion * bwmul
         tsupp_aud = (np.round(bw_conversion / fsupp * weird_factor)).astype(int)
         tsupp = np.concatenate([tsupp_lin, tsupp_aud])
 
@@ -553,7 +568,7 @@ def response(g, fs):
 
     return G
 
-def plot_response(g, fs, scale=False, fc_crit=None, decoder=False):
+def plot_response(g, fs, scale='erb', plot_scale=False, fc_crit=None, decoder=False):
     """Frequency response of the filters.
     
     Args:
@@ -572,14 +587,14 @@ def plot_response(g, fs, scale=False, fc_crit=None, decoder=False):
     g_hat_pos = g_hat[:num_channels,:]
     psd = np.sum(g_hat, axis=0)
 
-    if scale:
+    if plot_scale:
         plt.figure(figsize=(8, 2))
-        freq_samples, aud_samples = audspace_mod(fc_crit, fs, num_channels)
+        freq_samples, aud_samples = audspace_mod(fc_crit, fs, num_channels, scale)
         freqs = np.linspace(0, fs//2, fs//2)
 
-        auds = freqtoaud_mod(freqs, fc_crit)
+        auds = freqtoaud_mod(freqs, fc_crit, scale)
 
-        plt.scatter(freq_samples, freqtoaud_mod(freq_samples, fc_crit), color="black", label="Center frequencies", linewidths = 0.05)
+        plt.scatter(freq_samples, freqtoaud_mod(freq_samples, fc_crit, scale), color="black", label="Center frequencies", linewidths = 0.05)
         plt.plot(freqs, auds, color='black')
 
         if fc_crit is not None:
