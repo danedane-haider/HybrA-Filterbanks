@@ -702,7 +702,7 @@ def plot_coefficients(coefficients, fc, L, fs):
         fs (int): Sampling rate.
     """
     fig, ax = plt.subplots()
-    ax.pcolor(coefficients.numpy())#, origin='lower', aspect='auto')
+    ax.pcolor(coefficients.cpu().numpy())#, origin='lower', aspect='auto')
 
     locs, labels = plt.yticks()
     ax.set_yticks(locs[1:-1], [int(np.round(y, 0)) for y in fc[[int(x) for x in locs[1:-1]]]])

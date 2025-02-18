@@ -42,10 +42,10 @@ def noise_uniform(Ls):
 	return x.unsqueeze(0)
 
 class ISACDual(nn.Module):
-	def __init__(self, filterbank_config):
+	def __init__(self, kernel_max, num_channels, fc_max, fs, L, bwmul, scale):
 		super().__init__()
 		
-		[kernels, d, _, _, _, _, kernel_max, Ls] = audfilters(**filterbank_config)
+		[kernels, d, _, _, _, _, kernel_max, Ls] = audfilters(kernel_max=kernel_max,num_channels=num_channels, fc_max=fc_max, fs=fs,L=L,bwmul=bwmul,scale=scale)
 		self.kernels = kernels
 		self.stride = d
 		self.kernel_max = kernel_max
@@ -88,31 +88,24 @@ class ISACDual(nn.Module):
 		
 		return x.squeeze(1)
 
-def fit(filterbank_config, eps_loss, max_iter):
-	if torch.cuda.is_available():    
-		device = torch.device("cuda")
-	elif torch.backends.mps.is_available():
-		device = torch.device("mps")
-	else:
-		device = torch.device("cpu")
-	print(f"Using device {device} for computing ISAC dual")
-	model = ISACDual(filterbank_config=filterbank_config).to(device)
+def fit(kernel_max, num_channels, fc_max, fs, L, bwmul, scale, decoder_fit_eps, max_iter):
+	model = ISACDual(kernel_max, num_channels, fc_max, fs, L, bwmul, scale)
 	optimizer = optim.Adam(model.parameters(), lr=5e-4)
-	criterion = MSETight(beta=1e-7, fs=filterbank_config['fs'])
+	criterion = MSETight(beta=1e-7, fs=fs)
 
 	losses = []
 	kappas = []	
 
 	loss_item = float('inf')
 	i = 0
-	print("Computing the synthesis filterbank. This might take a while :)")
-	while loss_item >= eps_loss:
+	print("Computing the synthesis filterbank. This might take a while ⛷️")
+	while loss_item >= decoder_fit_eps:
 		optimizer.zero_grad()
-		x = noise_uniform(model.Ls).to(device)
+		x = noise_uniform(model.Ls)
 		output = model(x)
 		
-		w_real = model.decoder_kernels_real.squeeze().to(device)
-		w_imag = model.decoder_kernels_imag.squeeze().to(device)
+		w_real = model.decoder_kernels_real.squeeze()
+		w_imag = model.decoder_kernels_imag.squeeze()
 		
 		loss, loss_tight, kappa = criterion(output, x, w_real + 1j*w_imag)
 		loss_item = loss.item()

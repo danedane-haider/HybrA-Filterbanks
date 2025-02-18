@@ -1,3 +1,5 @@
+from typing import Union
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -8,19 +10,22 @@ from hybra.utils import plot_coefficients as plot_coefficients_
 from hybra._fit_dual import fit
 
 class ISAC(nn.Module):
-    def __init__(self, filterbank_config={'kernel_max':128,
-                                          'num_channels':96,
-                                          'fc_max':5000,
-                                          'fs':16000,
-                                          'L':16000,
-                                          'bwmul':1,
-                                          'scale':'erb'},
-                                          is_encoder_learnable=False,
-                                          use_decoder=False,
-                                          is_decoder_learnable=False):
+    def __init__(self,
+                 kernel_max:Union[int,None]=128,
+                 num_channels:int=40,
+                 fc_max:Union[float,int,None]=None,
+                 fs:int=16000, 
+                 L:int=16000,
+                 bwmul:float=1,
+                 scale:str='mel',
+                 is_encoder_learnable=False,
+                 use_decoder=False,
+                 is_decoder_learnable=False):
         super().__init__()
 
-        [kernels, d, fc, fc_min, fc_max, kernel_min, kernel_max, Ls] = audfilters(**filterbank_config)
+        [kernels, d, fc, fc_min, fc_max, kernel_min, kernel_max, Ls] = audfilters(
+            kernel_max=kernel_max,num_channels=num_channels, fc_max=fc_max, fs=fs,L=L,bwmul=bwmul,scale=scale
+        )
 
         self.filters = kernels
         self.stride = d
@@ -30,8 +35,8 @@ class ISAC(nn.Module):
         self.kernel_min = kernel_min
         self.kernel_max = kernel_max
         self.Ls = Ls
-        self.fs = filterbank_config['fs']
-        self.scale = filterbank_config['scale']
+        self.fs = fs
+        self.scale = scale
 
         kernels_real = kernels.real.to(torch.float32)
         kernels_imag = kernels.imag.to(torch.float32)
@@ -47,7 +52,7 @@ class ISAC(nn.Module):
         if use_decoder:
             max_iter = 1000 # TODO: should we do something like that?
             decoder_fit_eps = 1e-6
-            decoder_kernels_real, decoder_kernels_imag, _, _ = fit(filterbank_config, decoder_fit_eps, max_iter)
+            decoder_kernels_real, decoder_kernels_imag, _, _ = fit(kernel_max=kernel_max,num_channels=num_channels, fc_max=fc_max, fs=fs,L=L,bwmul=bwmul,scale=scale, decoder_fit_eps=decoder_fit_eps, max_iter=max_iter)
 
             if is_decoder_learnable:
                 self.register_parameter('decoder_kernels_real', nn.Parameter(decoder_kernels_real, requires_grad=True))
@@ -103,7 +108,7 @@ class ISAC(nn.Module):
         return x.squeeze(1)
 
     def plot_response(self):
-        plot_response_(g=(self.kernels_real + 1j*self.kernels_imag).detach().numpy(), fs=self.fs, scale=self.scale, plot_scale=True, fc_min=self.fc_min, fc_max=self.fc_max, kernel_min=self.kernel_min)
+        plot_response_(g=(self.kernels_real + 1j*self.kernels_imag).cpu().detach().numpy(), fs=self.fs, scale=self.scale, plot_scale=True, fc_min=self.fc_min, fc_max=self.fc_max, kernel_min=self.kernel_min)
 
     def plot_decoder_response(self):
         if self.use_decoder:

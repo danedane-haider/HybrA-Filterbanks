@@ -1,28 +1,36 @@
+from typing import Union
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from hybra.utils import condition_number, fir_tightener3000, audfilters, plot_response
+from hybra.utils import plot_coefficients as plot_coefficients_
 
 class HybrA(nn.Module):
-    def __init__(self, filterbank_config={'kernel_max':256,
-                                          'num_channels':96,
-                                          'fc_max':8000,
-                                          'fs':16000,
-                                          'L':16000,
-                                          'bwmul':1,
-                                          'scale':'erb'}, learned_kernel_size=24, start_tight:bool=True):
+    def __init__(self,
+                 kernel_max:Union[int,None]=128,
+                 num_channels:int=40,
+                 fc_max:Union[float,int,None]=None,
+                 fs:int=16000, 
+                 L:int=16000,
+                 bwmul:float=1,
+                 scale:str='mel',
+                 learned_kernel_size=16,
+                 start_tight:bool=True):
         
         super().__init__()
 
-        [kernels, d, fc, _, _, _, kernel_max, Ls] = audfilters(**filterbank_config)
+        [kernels, d, fc, _, _, _, kernel_max, Ls] = audfilters(
+            kernel_max=kernel_max,num_channels=num_channels, fc_max=fc_max, fs=fs,L=L,bwmul=bwmul,scale=scale
+        )
 
         self.aud_kernels = kernels
         self.stride = d
         self.fc = fc
         self.kernel_max = kernel_max
         self.Ls = Ls
-        self.fs = filterbank_config['fs']
-        self.num_channels = filterbank_config['num_channels']
+        self.fs = fs
+        self.num_channels = num_channels
         self.learned_kernel_size = learned_kernel_size
 
         self.aud_kernels_real = kernels.real.to(torch.float32)
@@ -168,3 +176,7 @@ class HybrA(nn.Module):
         plot_response((self.hybra_kernels_real + 1j*self.hybra_kernels_imag).squeeze().detach().numpy(), self.fs)
     def plot_decoder_response(self):
         plot_response((self.hybra_kernels_real + 1j*self.hybra_kernels_imag).squeeze().detach().numpy(), self.fs, decoder=True)
+    def plot_coefficients(self, x):
+        with torch.no_grad():
+            coefficients = torch.log10(torch.abs(self.forward(x)[0]**2))
+        plot_coefficients_(coefficients, self.fc, self.Ls, self.fs)
