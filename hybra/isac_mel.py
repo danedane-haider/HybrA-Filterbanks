@@ -8,7 +8,7 @@ from hybra.utils import audfilters
 from hybra.utils import plot_response as plot_response_
 from hybra.utils import plot_coefficients as plot_coefficients_
 
-class ISACSpec(nn.Module):
+class ISACMelSpectrogram(nn.Module):
     def __init__(self,
                  kernel_max:Union[int,None]=None,
                  num_channels:int=40,
@@ -40,8 +40,8 @@ class ISACSpec(nn.Module):
         self.time_avg = self.kernel_max // self.stride
         self.time_avg_stride = self.time_avg // 2
 
-        kernels_real = torch.tensor(kernels.real, dtype=torch.float32)
-        kernels_imag = torch.tensor(kernels.imag, dtype=torch.float32)
+        kernels_real = kernels.real.to(torch.float32)
+        kernels_imag = kernels.imag.to(torch.float32)
 
         self.is_log = is_log
 
