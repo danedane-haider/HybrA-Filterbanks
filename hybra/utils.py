@@ -140,6 +140,7 @@ def fir_tightener3000(w:torch.Tensor, supp:int, D:int, eps:float=1.01, Ls:Union[
     Returns:
         Filterbank with condition number *eps* and support length *supp*. If length=supp then the resulting filterbank is the canonical tight filterbank of w.
     """
+    print('Hold on, the kernels are tightening')
     if Ls is not None:
         w =  torch.cat([w, torch.zeros(w.shape[0], Ls-w.shape[1])], dim=1)
     w_tight = w.clone()

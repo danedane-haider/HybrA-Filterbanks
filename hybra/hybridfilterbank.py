@@ -46,10 +46,10 @@ class HybrA(nn.Module):
         learned_kernels = (-torch.sqrt(k) - torch.sqrt(k)) * torch.rand([self.num_channels, 1, self.learned_kernel_size]) + torch.sqrt(k)
 
         if start_tight:
-            learned_kernels = torch.tensor(fir_tightener3000(
-                learned_kernels.squeeze(1), self.learned_kernel_size, D=d, eps=1.01
-            ),  dtype=torch.float32).unsqueeze(1)
-            learned_kernels = learned_kernels / torch.norm(learned_kernels, dim=-1, keepdim=True)
+            learned_kernels = fir_tightener3000(
+                learned_kernels.squeeze(1), self.learned_kernel_size, D=d, eps=1.01, Ls=self.learned_kernel_size * d
+            ).to(torch.float32).unsqueeze(1)
+            #learned_kernels = learned_kernels / torch.norm(learned_kernels, dim=-1, keepdim=True)
         
         self.learned_kernels_real = nn.Parameter(learned_kernels, requires_grad=True)
         self.learned_kernels_imag = nn.Parameter(learned_kernels, requires_grad=True)
