@@ -15,7 +15,7 @@ class HybrA(nn.Module):
                  L:int=16000,
                  bwmul:float=1,
                  scale:str='mel',
-                 learned_kernel_size=16,
+                 learned_kernel_size:int=16,
                  start_tight:bool=True):
         
         super().__init__()

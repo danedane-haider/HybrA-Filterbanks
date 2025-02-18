@@ -7,7 +7,7 @@ import warnings
 from hybra.utils import audfilters
 
 class MSETight(torch.nn.Module):
-	def __init__(self, beta: float = 0.0, fs: int = 16000):
+	def __init__(self, beta:float=0.0, fs:int=16000):
 		super().__init__()
 		self.beta = beta
 		self.loss = torch.nn.MSELoss()

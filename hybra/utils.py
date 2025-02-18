@@ -90,7 +90,7 @@ def can_tight(w:torch.Tensor, D:int) -> torch.Tensor:
             w_hat_tight[:,idx] = H.T.to(torch.complex64)
         return torch.fft.ifft(torch.fft.ifft(w_hat_tight.T, dim=1) * D ** 0.5, dim=0).T
 
-def kappa_alias(w:torch.Tensor, D:int) -> torch.Tensor:
+def frequency_correlation(w:torch.Tensor, D:int, padto:Union[int,None]=None, diag_only:bool=False) -> torch.Tensor:
     """
     Computes the frequency correlation functions.
     Parameters:
@@ -99,16 +99,21 @@ def kappa_alias(w:torch.Tensor, D:int) -> torch.Tensor:
     Output:
         G: (length x D) matrix with aliasing terms as columns
     """
+    if padto is not None:
+        w = torch.cat([w, torch.zeros(w.shape[0], padto-w.shape[1]).to(w.device)], dim=1)
     w_hat = torch.fft.fft(w, dim=-1).T
     N = w_hat.shape[0]
     assert N % D == 0, "Oh no! Decimation factor must divide signal length!"
     G = torch.zeros(N, D)
     G[:,0] = torch.sum(torch.abs(w_hat)**2, dim=1)
-    for j in range(1,D):
-        G[:,j] = torch.sum(w_hat * torch.conj(w_hat.roll(j * N//D, 0)), dim=1)
-    return G
+    if diag_only:
+        return G[:,0].T
+    else:
+        for j in range(1,D):
+            G[:,j] = torch.sum(w_hat * torch.conj(w_hat.roll(j * N//D, 0)), dim=1)
+        return G.T
 
-def alias_conditioner(w:torch.Tensor, D:int) -> torch.Tensor:
+def alias(w:torch.Tensor, D:int, padto:Union[int,None]=None, diag_only:bool=False) -> torch.Tensor:
     """
     Computes the norm of the aliasing terms.
     Parameters:
@@ -117,8 +122,11 @@ def alias_conditioner(w:torch.Tensor, D:int) -> torch.Tensor:
     Output:
         A: Energy of the aliasing terms
     """
-    G = kappa_alias(w, D)
-    return torch.max(G[:,0]).div(torch.min(G[:,0])) + torch.norm(G[:,1::], dim=1)**2 - 1
+    G = frequency_correlation(w=w, D=D, padto=padto, diag_only=diag_only)
+    if diag_only:
+        return torch.max(G).div(torch.min(G))
+    else:
+        return torch.max(G[0,:]).div(torch.min(G[0,:])) + torch.norm(G[1::,:], dim=0)**2
 
 def fir_tightener3000(w:torch.Tensor, supp:int, D:int, eps:float=1.01, Ls:Union[int,None]=None):
     """
