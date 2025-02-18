@@ -154,3 +154,5 @@ bw.py
 audio/
 
 plot_spec.py
+
+*.txt
