@@ -1,3 +1,4 @@
+from .isac import ISAC
 from .hybridfilterbank import HybrA
-from .fir_audlet_filterbank import ISAC
-from .fir_mel_filterbank import ISACSpec
+from .isac_mel import ISACSpec
+from ._fit_dual import fit

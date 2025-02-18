@@ -1,36 +1,40 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from hybra.utils import audfilters_fir
+
+from hybra.utils import audfilters, condition_number
 from hybra.utils import plot_response as plot_response_
 from hybra.utils import plot_coefficients as plot_coefficients_
-from hybra.utils import calculate_condition_number
-from hybra._fit_neurodual import fit
+from hybra._fit_dual import fit
 
 class ISAC(nn.Module):
-    def __init__(self, filterbank_config={'filter_len':256,
-                                          'num_channels':64,
+    def __init__(self, filterbank_config={'kernel_max':128,
+                                          'num_channels':96,
+                                          'fc_max':5000,
                                           'fs':16000,
-                                          'Ls':16000,
-                                          'bwmul':1},
+                                          'L':16000,
+                                          'bwmul':1,
+                                          'scale':'erb'},
                                           is_encoder_learnable=False,
                                           use_decoder=False,
-                                          is_decoder_learnable=False,
-                                          decoder_fit_eps=1e-5):
+                                          is_decoder_learnable=False):
         super().__init__()
 
-        [filters, d, fc, fc_crit, L] = audfilters_fir(**filterbank_config)
+        [kernels, d, fc, fc_min, fc_max, kernel_min, kernel_max, Ls] = audfilters(**filterbank_config)
 
-        self.filters = filters
+        self.filters = kernels
         self.stride = d
-        self.filter_len = filterbank_config['filter_len'] 
-        self.fs = filterbank_config['fs']
         self.fc = fc
-        self.fc_crit = fc_crit
-        self.Ls = L#filterbank_config['Ls']
+        self.fc_min = fc_min
+        self.fc_max = fc_max
+        self.kernel_min = kernel_min
+        self.kernel_max = kernel_max
+        self.Ls = Ls
+        self.fs = filterbank_config['fs']
+        self.scale = filterbank_config['scale']
 
-        kernels_real = torch.tensor(filters.real, dtype=torch.float32)
-        kernels_imag = torch.tensor(filters.imag, dtype=torch.float32)
+        kernels_real = kernels.real.to(torch.float32)
+        kernels_imag = kernels.imag.to(torch.float32)
 
         if is_encoder_learnable:
             self.register_parameter('kernels_real', nn.Parameter(kernels_real, requires_grad=True))
@@ -42,6 +46,7 @@ class ISAC(nn.Module):
         self.use_decoder = use_decoder
         if use_decoder:
             max_iter = 1000 # TODO: should we do something like that?
+            decoder_fit_eps = 1e-6
             decoder_kernels_real, decoder_kernels_imag, _, _ = fit(filterbank_config, decoder_fit_eps, max_iter)
 
             if is_decoder_learnable:
@@ -52,7 +57,7 @@ class ISAC(nn.Module):
                 self.register_buffer('decoder_kernels_imag', decoder_kernels_imag)
 
     def forward(self, x):
-        x = F.pad(x.unsqueeze(1), (self.filter_len//2, self.filter_len//2), mode='circular')
+        x = F.pad(x.unsqueeze(1), (self.kernel_max//2, self.kernel_max//2), mode='circular')
 
         out_real = F.conv1d(x, self.kernels_real.to(x.device).unsqueeze(1), stride=self.stride)
         out_imag = F.conv1d(x, self.kernels_imag.to(x.device).unsqueeze(1), stride=self.stride)
@@ -70,46 +75,55 @@ class ISAC(nn.Module):
         --------
         x (torch.Tensor) - output tensor of shape (batch_size, signal_length)
         """
+        L_in = x_real.shape[-1]
+        L_out = self.Ls
+
+        kernel_size = self.kernel_max
+        padding = kernel_size // 2
+
+        # L_out = (L_in -1) * stride - 2 * padding + dialation * (kernel_size - 1) + output_padding + 1 ; dialation = 1
+        output_padding = L_out - (L_in - 1) * self.stride + 2 * padding - kernel_size
+        
         x = (
             F.conv_transpose1d(
                 x_real,
                 self.decoder_kernels_real.to(x_real.device).unsqueeze(1),
                 stride=self.stride,
-                padding=self.filter_len//2,
-                output_padding=self.stride - 2
+                padding=padding,
+                output_padding=output_padding
             ) + F.conv_transpose1d(
                 x_imag,
                 self.decoder_kernels_imag.to(x_imag.device).unsqueeze(1),
                 stride=self.stride,
-                padding=self.filter_len//2,
-                output_padding=self.stride - 2
+                padding=padding,
+                output_padding=output_padding
             )
         )
 
         return x.squeeze(1)
 
     def plot_response(self):
-        plot_response_(g=(self.kernels_real + 1j*self.kernels_imag).cpu().detach().numpy(), fs=self.fs, scale=True, fc_crit=self.fc_crit)
+        plot_response_(g=(self.kernels_real + 1j*self.kernels_imag).detach().numpy(), fs=self.fs, scale=self.scale, plot_scale=True, fc_min=self.fc_min, fc_max=self.fc_max, kernel_min=self.kernel_min)
 
     def plot_decoder_response(self):
         if self.use_decoder:
-            plot_response_(g=(self.decoder_kernels_real+1j*self.decoder_kernels_imag).cpu().detach().numpy(), fs=self.fs, decoder=True)
+            plot_response_(g=(self.decoder_kernels_real+1j*self.decoder_kernels_imag).detach().cpu().numpy(), fs=self.fs, scale=self.scale, decoder=True)
         else:
             raise NotImplementedError("No decoder configured")
 
     def plot_coefficients(self, x):
         with torch.no_grad():
             coefficients = torch.log10(torch.abs(self.forward(x)[0]**2))
-        plot_coefficients_(coefficients.cpu(), self.fc, self.Ls, self.fs)
+        plot_coefficients_(coefficients, self.fc, self.Ls, self.fs)
 
     @property
     def condition_number(self):
         filters = (self.kernels_real + 1j*self.kernels_imag).squeeze()
         filters = F.pad(filters, (0, self.Ls - filters.shape[-1]), mode='constant', value=0)
-        return calculate_condition_number(filters, int(self.stride))
+        return condition_number(filters, int(self.stride))
     
     @property
     def condition_number_decoder(self):
         filters = (self.decoder_kernels_real + 1j*self.decoder_kernels_imag).squeeze()
         filters = F.pad(filters, (0, self.Ls - filters.shape[-1]), mode='constant', value=0)
-        return calculate_condition_number(filters, int(self.stride))
+        return condition_number(filters, int(self.stride))
