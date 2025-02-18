@@ -148,6 +148,7 @@ cython_debug/
 tighten_cqt_filter.py
 
 uv.lock
+.python-version
 
 test.py
 bw.py
