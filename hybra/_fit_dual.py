@@ -5,25 +5,32 @@ import torch.optim as optim
 import warnings
 
 from hybra.utils import audfilters
+from hybra import ISAC
 
-class MSETight(torch.nn.Module):
+class MSETight(nn.Module):
 	def __init__(self, beta:float=0.0, fs:int=16000):
 		super().__init__()
 		self.beta = beta
-		self.loss = torch.nn.MSELoss()
+		self.loss = nn.MSELoss()
 		self.fs = fs
 
-	def forward(self, preds, target, w=None):
-		loss = self.loss(preds, target)
-		Lg = w.shape[-1]
-		num_channels = w.shape[0]
-		w_long = torch.concatenate([w, torch.zeros((num_channels, self.fs - Lg)).to(preds.device)], axis=1)
-		w_neg = torch.conj(w_long)
-		w_full = torch.concatenate([w_long, w_neg], dim=0)
-		w_hat = torch.sum(torch.abs(torch.fft.fft(w_full, dim=1)[:, :self.fs//2])**2, dim=0)
-		kappa = w_hat.max() / w_hat.min()
-
-		return loss, loss + self.beta * (kappa - 1), kappa.item()
+	def forward(self, preds=None, target=None, kernels=None):
+		if kernels is not None:
+			Lg = kernels.shape[-1]
+			num_channels = kernels.shape[0]
+			kernels_long = torch.concatenate([kernels, torch.zeros((num_channels, self.fs - Lg)).to(preds.device)], axis=1)
+			kernels_neg = torch.conj(kernels_long)
+			kernels_full = torch.concatenate([kernels_long, kernels_neg], dim=0)
+			kernels_hat = torch.sum(torch.abs(torch.fft.fft(kernels_full, dim=1)[:, :self.fs//2])**2, dim=0)
+			kappa = kernels_hat.max() / kernels_hat.min()
+			if preds is not None:
+				loss = self.loss(preds, target)
+				return loss, loss + self.beta * (kappa - 1), kappa.item()
+			else:
+				return self.beta * (kappa - 1), kappa.item()
+		else:
+			loss = self.loss(preds, target)
+			return loss
 
 def noise_uniform(Ls):
 	Ls = int(Ls)
@@ -45,7 +52,7 @@ class ISACDual(nn.Module):
 	def __init__(self, kernel_max, num_channels, fc_max, fs, L, bwmul, scale):
 		super().__init__()
 		
-		[kernels, d, _, _, _, _, kernel_max, Ls] = audfilters(kernel_max=kernel_max,num_channels=num_channels, fc_max=fc_max, fs=fs,L=L,bwmul=bwmul,scale=scale)
+		[kernels, d, _, _, _, _, kernel_max, Ls] = audfilters(kernel_max=kernel_max, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, bwmul=bwmul, scale=scale)
 		self.kernels = kernels
 		self.stride = d
 		self.kernel_max = kernel_max
@@ -101,18 +108,50 @@ def fit(kernel_max, num_channels, fc_max, fs, L, bwmul, scale, decoder_fit_eps, 
 	print("Computing the synthesis filterbank. This might take a while ⛷️")
 	while loss_item >= decoder_fit_eps:
 		optimizer.zero_grad()
-		x = noise_uniform(model.Ls)
-		output = model(x)
+		x_in = noise_uniform(model.Ls)
+		x_out = model(x_in)
 		
 		w_real = model.decoder_kernels_real.squeeze()
 		w_imag = model.decoder_kernels_imag.squeeze()
 		
-		loss, loss_tight, kappa = criterion(output, x, w_real + 1j*w_imag)
+		loss, loss_tight, kappa = criterion(x_out, x_in, w_real + 1j*w_imag)
 		loss_item = loss.item()
 		loss_tight.backward()
 		optimizer.step()
 		losses.append(loss.item())
 		kappas.append(kappa)
+
+		if i > max_iter:
+			warnings.warn(f"Did not converge after {max_iter} iterations.")
+			break
+		i += 1
+
+	print(f"Final Stats:\n\tFinal PSD ratio: {kappas[-1]}\n\tBest MSE loss: {losses[-1]}")
+	
+	return model.decoder_kernels_real.detach(), model.decoder_kernels_imag.detach(), losses, kappas
+
+
+def tight(kernel_max, num_channels, fc_max, fs, L, bwmul, scale, fit_eps, max_iter):
+	model = ISAC(kernel_max, num_channels, fc_max, fs, L, bwmul, scale, is_encoder_learnable=True)
+	optimizer = optim.Adam(model.parameters(), lr=5e-4)
+	criterion = MSETight(beta=1e-7, fs=fs)
+
+	losses = []
+	kappas = []	
+
+	loss_item = float('inf')
+	i = 0
+	print("Tightening ISAC. This might take a while ⛷️")
+	while loss_item >= fit_eps:
+		optimizer.zero_grad()
+		
+		kernels_real = model.kernels_real.squeeze()
+		kernels_imag = model.kernels_imag.squeeze()
+		
+		kappa, kappa_item = criterion(preds=None, target=None, kernels=kernels_real + 1j*kernels_imag)
+		kappa.backward()
+		optimizer.step()
+		kappas.append(kappa_item)
 
 		if i > max_iter:
 			warnings.warn(f"Did not converge after {max_iter} iterations.")
