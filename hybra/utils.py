@@ -8,18 +8,18 @@ from typing import Union, Tuple
 ##################### Cool routines to study decimated filterbanks #################################
 ####################################################################################################
 
-def frame_bounds(w:torch.Tensor, D:int) -> Tuple[torch.Tensor, torch.Tensor]:
+def frame_bounds(w:torch.Tensor, d:int) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Computes the frame bounds of a filterbank given in impulse responses using the polyphase representation.
     Parameters:
         w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[num_channels, length]
-        D: Decimation (or downsampling) factor, must divide filter length!
+        d: Decimation (or downsampling) factor, must divide filter length!
     Returns:
         tuple:
             A, B: Frame bounds
     """
     w_hat = torch.fft.fft(w, dim=-1).T
-    if D == 1:
+    if d == 1:
         lp = torch.sum(w_hat.abs() ** 2, dim=1)
         A = torch.min(lp)
         B = torch.max(lp)
@@ -27,7 +27,7 @@ def frame_bounds(w:torch.Tensor, D:int) -> Tuple[torch.Tensor, torch.Tensor]:
     else:
         N = w_hat.shape[0]
         M = w_hat.shape[1]
-        assert N % D == 0, "Oh no! Decimation factor must divide signal length!"
+        assert N % d == 0, "Oh no! Decimation factor must divide signal length!"
 
         if w_hat.device.type == "mps":
             temp_device = torch.device("cpu")
@@ -37,104 +37,104 @@ def frame_bounds(w:torch.Tensor, D:int) -> Tuple[torch.Tensor, torch.Tensor]:
         w_hat_cpu = w_hat.to(temp_device)
         A = torch.tensor([torch.inf]).to(temp_device)
         B = torch.tensor([0]).to(temp_device)
-        Ha = torch.zeros((D,M)).to(temp_device)
-        Hb = torch.zeros((D,M)).to(temp_device)
+        Ha = torch.zeros((d,M)).to(temp_device)
+        Hb = torch.zeros((d,M)).to(temp_device)
 
-        for j in range(N//D):
-            idx_a = (j - torch.arange(D) * (N//D)) % N
-            idx_b = (torch.arange(D) * (N//D) - j) % N
+        for j in range(N//d):
+            idx_a = (j - torch.arange(d) * (N//d)) % N
+            idx_b = (torch.arange(d) * (N//d) - j) % N
             Ha = w_hat_cpu[idx_a, :]
             Hb = torch.conj(w_hat_cpu[idx_b, :])
             lam = torch.linalg.eigvalsh(Ha @ Ha.H + Hb @ Hb.H).real
             A = torch.min(A, torch.min(lam))
             B = torch.max(B, torch.max(lam))
-        return A/D, B/D
+        return A/d, B/d
 
-def condition_number(w:torch.Tensor, D:int) -> torch.Tensor:
+def condition_number(w:torch.Tensor, d:int) -> torch.Tensor:
     """
     Computes the condition number of a filterbank.
     Parameters:
         w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[num_channels, signal_length]
-        D: Decimation factor (stride), must divide signal_length!
+        d: Decimation factor (stride), must divide signal_length!
     Returns:
         kappa: Condition number
     """
-    A, B = frame_bounds(w, D)
+    A, B = frame_bounds(w, d)
     return B / A
 
-def can_tight(w:torch.Tensor, D:int) -> torch.Tensor:
+def can_tight(w:torch.Tensor, d:int) -> torch.Tensor:
     """
     Computes the canonical tight filterbank of w (time domain) using the polyphase representation.
     Parameters:
-        w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[num_channels, signal_length]
-        D: Decimation factor, must divide signal_length!
+        w: Impulse responses of the filterbank as 2-d Tensor torch.tensor[num_channels, signal_length]
+        d: Decimation factor, must divide signal_length!
     Returns:
         W: Canonical tight filterbank of W (torch.tensor[num_channels, signal_length])
     """
     w_hat = torch.fft.fft(w.T, dim=0)
-    if D == 1:
+    if d == 1:
         lp = torch.sum(w_hat.abs() ** 2, dim=1).reshape(-1,1)
         w_hat_tight = w_hat * (lp ** (-0.5))
         return torch.fft.ifft(w_hat_tight.T, dim=1)
     else:
         N = w_hat.shape[0]
         J = w_hat.shape[1]
-        assert N % D == 0, "Oh no! Decimation factor must divide signal length!"
+        assert N % d == 0, "Oh no! Decimation factor must divide signal length!"
 
         w_hat_tight = torch.zeros(J, N, dtype=torch.complex64)
-        for j in range(N//D):
-            idx = (j - torch.arange(D) * (N//D)) % N
+        for j in range(N//d):
+            idx = (j - torch.arange(d) * (N//d)) % N
             H = w_hat[idx, :]
             U, _, V = torch.linalg.svd(H, full_matrices=False)
             H = U @ V
             w_hat_tight[:,idx] = H.T.to(torch.complex64)
-        return torch.fft.ifft(torch.fft.ifft(w_hat_tight.T, dim=1) * D ** 0.5, dim=0).T
+        return torch.fft.ifft(torch.fft.ifft(w_hat_tight.T, dim=1) * d ** 0.5, dim=0).T
 
-def frequency_correlation(w:torch.Tensor, D:int, padto:Union[int,None]=None, diag_only:bool=False) -> torch.Tensor:
+def frequency_correlation(w:torch.Tensor, d:int, padto:Union[int,None]=None, diag_only:bool=False) -> torch.Tensor:
     """
     Computes the frequency correlation functions.
     Parameters:
         w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[num_channels, sig_length]
-        D (int): Decimation factor, must divide filter length!
+        d (int): Decimation factor, must divide filter length!
     Output:
-        G: (length x D) matrix with aliasing terms as columns
+        G: (length x d) matrix with aliasing terms as columns
     """
     if padto is not None:
         w = torch.cat([w, torch.zeros(w.shape[0], padto-w.shape[1]).to(w.device)], dim=1)
     w_hat = torch.fft.fft(w, dim=-1).T
     N = w_hat.shape[0]
-    assert N % D == 0, "Oh no! Decimation factor must divide signal length!"
-    G = torch.zeros(N, D)
+    assert N % d == 0, "Oh no! Decimation factor must divide signal length!"
+    G = torch.zeros(N, d, dtype=w_hat.dtype)
     G[:,0] = torch.sum(torch.abs(w_hat)**2, dim=1)
     if diag_only:
-        return G[:,0].T
+        return torch.real(G[:,0])
     else:
-        for j in range(1,D):
-            G[:,j] = torch.sum(w_hat * torch.conj(w_hat.roll(j * N//D, 0)), dim=1)
+        for j in range(1,d):
+            G[:,j] = torch.sum(w_hat * torch.conj(w_hat.roll(j * N//d, 0)), dim=1)
         return G.T
 
-def alias(w:torch.Tensor, D:int, padto:Union[int,None]=None, diag_only:bool=False) -> torch.Tensor:
+def alias(w:torch.Tensor, d:int, padto:Union[int,None]=None, diag_only:bool=False) -> torch.Tensor:
     """
     Computes the norm of the aliasing terms.
     Parameters:
         w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[num_channels, sig_length]
-        D: Decimation factor, must divide filter length!
+        d: Decimation factor, must divide filter length!
     Output:
         A: Energy of the aliasing terms
     """
-    G = frequency_correlation(w=w, D=D, padto=padto, diag_only=diag_only)
+    G = frequency_correlation(w=w, d=d, padto=padto, diag_only=diag_only)
     if diag_only:
-        return torch.max(G).div(torch.min(G))
+        return torch.max(G[:16000//2]).div(torch.min(G[:16000//2]))
     else:
-        return torch.max(G[0,:]).div(torch.min(G[0,:])) + torch.norm(G[1::,:], dim=0)**2
+        return torch.max(torch.real(G[0,:])).div(torch.min(torch.real(G[0,:]))) + torch.sum(torch.norm(G[1::,:], dim=-1)**2)
 
-def fir_tightener3000(w:torch.Tensor, supp:int, D:int, eps:float=1.01, Ls:Union[int,None]=None):
+def fir_tightener3000(w:torch.Tensor, supp:int, d:int, eps:float=1.01, Ls:Union[int,None]=None):
     """
     Iterative tightening procedure with fixed support for a given filterbank w
     Parameters:
         w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[num_channels, signal_length].
         supp: Desired support of the resulting filterbank
-        D: Decimation factor, must divide filter length!
+        d: Decimation factor, must divide filter length!
         eps: Desired precision for the condition number
         Ls: System length (if not already given by w). If set, the resulting filterbank is padded with zeros to length Ls.
     Returns:
@@ -144,11 +144,11 @@ def fir_tightener3000(w:torch.Tensor, supp:int, D:int, eps:float=1.01, Ls:Union[
     if Ls is not None:
         w =  torch.cat([w, torch.zeros(w.shape[0], Ls-w.shape[1])], dim=1)
     w_tight = w.clone()
-    kappa = condition_number(w, D).item()
+    kappa = condition_number(w, d).item()
     while kappa > eps:
-        w_tight = can_tight(w_tight, D)
+        w_tight = can_tight(w_tight, d)
         w_tight[:, supp:] = 0
-        kappa = condition_number(w_tight, D).item()
+        kappa = condition_number(w_tight, d).item()
     if Ls is None:
         return w_tight
     else:

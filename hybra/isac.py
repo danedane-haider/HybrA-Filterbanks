@@ -28,7 +28,7 @@ class ISAC(nn.Module):
             kernel_max=kernel_max,num_channels=num_channels, fc_max=fc_max, fs=fs,L=L,bwmul=bwmul,scale=scale
         )
 
-        self.filters = kernels
+        self.kernels = kernels
         self.stride = d
         self.fc = fc
         self.fc_min = fc_min
@@ -39,26 +39,26 @@ class ISAC(nn.Module):
         self.fs = fs
         self.scale = scale
 
-        kernels_real = kernels.real.to(torch.float32)
-        kernels_imag = kernels.imag.to(torch.float32)
+        k_real = kernels.real.to(torch.float32)
+        k_imag = kernels.imag.to(torch.float32)
         
         if tighten:
             max_iter = 1000
             fit_eps = 1.0001
-            kernels_real, kernels_imag, _ = tight(kernel_max=kernel_max, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, bwmul=bwmul, scale=scale, fit_eps=fit_eps, max_iter=max_iter)
+            k_real, k_imag, _ = tight(k_real+1j*k_imag, d, Ls, fs, fit_eps, max_iter)
 
         if is_encoder_learnable:
-            self.register_parameter('kernels_real', nn.Parameter(kernels_real, requires_grad=True))
-            self.register_parameter('kernels_imag', nn.Parameter(kernels_imag, requires_grad=True))
+            self.register_parameter('kernels_real', nn.Parameter(k_real, requires_grad=True))
+            self.register_parameter('kernels_imag', nn.Parameter(k_imag, requires_grad=True))
         else:
-            self.register_buffer('kernels_real', kernels_real)
-            self.register_buffer('kernels_imag', kernels_imag)
+            self.register_buffer('kernels_real', k_real)
+            self.register_buffer('kernels_imag', k_imag)
         
         self.use_decoder = use_decoder
         if use_decoder:
             max_iter = 1000 # TODO: should we do something like that?
             decoder_fit_eps = 1e-6
-            decoder_kernels_real, decoder_kernels_imag, _, _ = fit(kernel_max=kernel_max,num_channels=num_channels, fc_max=fc_max, fs=fs,L=L,bwmul=bwmul,scale=scale, decoder_fit_eps=decoder_fit_eps, max_iter=max_iter)
+            decoder_kernels_real, decoder_kernels_imag, _, _ = fit(k_real+1j*k_imag, d, Ls, fs, decoder_fit_eps, max_iter)
 
             if is_decoder_learnable:
                 self.register_parameter('decoder_kernels_real', nn.Parameter(decoder_kernels_real, requires_grad=True))
@@ -80,7 +80,7 @@ class ISAC(nn.Module):
 
         Parameters:
         -----------
-        x (torch.Tensor) - input tensor of shape (batch_size, n_filters, signal_length//hop_length)
+        x (torch.Tensor) - input tensor of shape (batch_size, num_channels, signal_length//hop_length)
 
         Returns:
         --------
@@ -129,12 +129,12 @@ class ISAC(nn.Module):
 
     @property
     def condition_number(self):
-        filters = (self.kernels_real + 1j*self.kernels_imag).squeeze()
-        filters = F.pad(filters, (0, self.Ls - filters.shape[-1]), mode='constant', value=0)
-        return condition_number(filters, int(self.stride))
+        kernels = (self.kernels_real + 1j*self.kernels_imag).squeeze()
+        kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
+        return condition_number(kernels, int(self.stride))
     
     @property
     def condition_number_decoder(self):
-        filters = (self.decoder_kernels_real + 1j*self.decoder_kernels_imag).squeeze()
-        filters = F.pad(filters, (0, self.Ls - filters.shape[-1]), mode='constant', value=0)
-        return condition_number(filters, int(self.stride))
+        kernels = (self.decoder_kernels_real + 1j*self.decoder_kernels_imag).squeeze()
+        kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
+        return condition_number(kernels, int(self.stride))

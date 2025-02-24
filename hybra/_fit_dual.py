@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import warnings
 
-from hybra.utils import audfilters, condition_number
+from hybra.utils import audfilters, condition_number, alias
 
 class MSETight(nn.Module):
 	def __init__(self, beta:float=0.0, fs:int=16000):
@@ -13,7 +13,7 @@ class MSETight(nn.Module):
 		self.loss = nn.MSELoss()
 		self.fs = fs
 
-	def forward(self, preds=None, target=None, kernels=None):
+	def forward(self, preds=None, target=None, kernels=None, d=None, Ls=None):
 		if kernels is not None:
 			Lg = kernels.shape[-1]
 			num_channels = kernels.shape[0]
@@ -22,6 +22,9 @@ class MSETight(nn.Module):
 			kernels_full = torch.concatenate([kernels_long, kernels_neg], dim=0)
 			kernels_hat = torch.sum(torch.abs(torch.fft.fft(kernels_full, dim=1)[:, :self.fs//2])**2, dim=0)
 			kappa = kernels_hat.max() / kernels_hat.min()
+			# padto = int(torch.ceil(torch.tensor(self.fs / d)) * d)
+			#kernels = F.pad(kernels, (0, Ls - kernels.shape[-1]), mode='constant', value=0)
+			#kappa = condition_number(kernels, int(d))
 			if preds is not None:
 				loss = self.loss(preds, target)
 				return loss, loss + self.beta * (kappa - 1), kappa.item()
@@ -48,13 +51,12 @@ def noise_uniform(Ls):
 	return x.unsqueeze(0)
 
 class ISACDual(nn.Module):
-	def __init__(self, kernel_max, num_channels, fc_max, fs, L, bwmul, scale):
+	def __init__(self, kernels, d, Ls):
 		super().__init__()
 		
-		[kernels, d, _, _, _, _, kernel_max, Ls] = audfilters(kernel_max=kernel_max, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, bwmul=bwmul, scale=scale)
-		self.kernels = kernels
+		#[kernels, d, _, _, _, _, kernel_max, Ls] = audfilters(kernel_max=kernel_max, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, bwmul=bwmul, scale=scale)
 		self.stride = d
-		self.kernel_max = kernel_max
+		self.kernel_max = kernels.shape[-1]
 		self.Ls = Ls
 		
 		self.register_buffer('kernels_real', torch.real(kernels).to(torch.float32))
@@ -62,6 +64,7 @@ class ISACDual(nn.Module):
 
 		self.register_parameter('decoder_kernels_real', nn.Parameter(torch.real(kernels).to(torch.float32), requires_grad=True))
 		self.register_parameter('decoder_kernels_imag', nn.Parameter(torch.imag(kernels).to(torch.float32), requires_grad=True))
+
 
 	def forward(self, x):
 		x = F.pad(x.unsqueeze(1), (self.kernel_max//2, self.kernel_max//2), mode='circular')
@@ -94,17 +97,17 @@ class ISACDual(nn.Module):
 		
 		return x.squeeze(1)
 
-def fit(kernel_max, num_channels, fc_max, fs, L, bwmul, scale, decoder_fit_eps, max_iter):
-	model = ISACDual(kernel_max, num_channels, fc_max, fs, L, bwmul, scale)
+def fit(kernels, d, Ls, fs, decoder_fit_eps, max_iter):
+	model = ISACDual(kernels, d, Ls)
 	optimizer = optim.Adam(model.parameters(), lr=0.00001)
-	criterion = MSETight(beta=1e-8, fs=fs)
+	criterion = MSETight(beta=1e-5, fs=fs)
 
 	losses = []
 	kappas = []	
 
 	loss_item = float('inf')
 	i = 0
-	print("Computing the synthesis filterbank. This might take a while ⛷️")
+	print("Computing synthesis kernels for ISAC. This might take a while ⛷️")
 	while loss_item >= decoder_fit_eps:
 		optimizer.zero_grad()
 		x_in = noise_uniform(model.Ls)
@@ -114,7 +117,6 @@ def fit(kernel_max, num_channels, fc_max, fs, L, bwmul, scale, decoder_fit_eps, 
 		w_imag = model.decoder_kernels_imag.squeeze()
 		
 		loss, loss_tight, kappa = criterion(x_out, x_in, w_real + 1j*w_imag)
-		loss_item = loss.item()
 		loss_tight.backward()
 		optimizer.step()
 		losses.append(loss.item())
@@ -129,14 +131,15 @@ def fit(kernel_max, num_channels, fc_max, fs, L, bwmul, scale, decoder_fit_eps, 
 	
 	return model.decoder_kernels_real.detach(), model.decoder_kernels_imag.detach(), losses, kappas
 
+
 class ISACTight(nn.Module):
-	def __init__(self, kernel_max, num_channels, fc_max, fs, L, bwmul, scale):
+	def __init__(self, kernels, d, Ls):
 		super().__init__()
 		
-		[kernels, d, _, _, _, _, kernel_max, Ls] = audfilters(kernel_max=kernel_max, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, bwmul=bwmul, scale=scale)
-		self.kernels = kernels
+		#[kernels, d, _, _, _, _, kernel_max, Ls] = audfilters(kernel_max=kernel_max, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, bwmul=bwmul, scale=scale)
+		#self.kernels = kernels
 		self.stride = d
-		self.kernel_max = kernel_max
+		self.kernel_max = kernels.shape[-1]
 		self.Ls = Ls
 
 		self.register_parameter('kernels_real', nn.Parameter(torch.real(kernels).to(torch.float32), requires_grad=True))
@@ -155,12 +158,12 @@ class ISACTight(nn.Module):
 		return condition_number(filters, int(self.stride))
 
 
-def tight(kernel_max, num_channels, fc_max, fs, L, bwmul, scale, fit_eps, max_iter):
-	model = ISACTight(kernel_max, num_channels, fc_max, fs, L, bwmul, scale)
+def tight(kernels, d, Ls, fs, fit_eps, max_iter):
+	model = ISACTight(kernels, d, Ls)
 	optimizer = optim.Adam(model.parameters(), lr=0.00001)
 	criterion = MSETight(beta=1, fs=fs)
 
-	print(f"Init Condition number: {model.condition_number}")
+	print(f"Init Condition number:\n\t{model.condition_number.item()}")
 
 	kappas = []	
 
@@ -173,7 +176,7 @@ def tight(kernel_max, num_channels, fc_max, fs, L, bwmul, scale, fit_eps, max_it
 		kernels_real = model.kernels_real.squeeze()
 		kernels_imag = model.kernels_imag.squeeze()
 		
-		kappa, kappa_item = criterion(preds=None, target=None, kernels=kernels_real + 1j*kernels_imag)
+		kappa, kappa_item = criterion(preds=None, target=None, kernels=kernels_real + 1j*kernels_imag, d=d, Ls=Ls)
 		kappa.backward()
 		optimizer.step()
 		kappas.append(kappa_item)
@@ -183,6 +186,6 @@ def tight(kernel_max, num_channels, fc_max, fs, L, bwmul, scale, fit_eps, max_it
 			break
 		i += 1
 
-	print(f"Init Condition number: {model.condition_number} and PSD ratio {kappas[-1]}")
+	print(f"Init Condition number:\n\t{model.condition_number.item()}\nand PSD ratio\n\t{kappas[-1]}")
 	
 	return model.kernels_real.detach(), model.kernels_imag.detach(), kappas
