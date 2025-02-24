@@ -14,7 +14,7 @@ class HybrA(nn.Module):
                  fs:int=16000, 
                  L:int=16000,
                  bwmul:float=1,
-                 scale:str='mel',
+                 scale:str='erb',
                  learned_kernel_size:int=16,
                  start_tight:bool=True):
         

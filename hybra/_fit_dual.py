@@ -4,8 +4,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import warnings
 
-from hybra.utils import audfilters
-from hybra import ISAC
+from hybra.utils import audfilters, condition_number
 
 class MSETight(nn.Module):
 	def __init__(self, beta:float=0.0, fs:int=16000):
@@ -18,7 +17,7 @@ class MSETight(nn.Module):
 		if kernels is not None:
 			Lg = kernels.shape[-1]
 			num_channels = kernels.shape[0]
-			kernels_long = torch.concatenate([kernels, torch.zeros((num_channels, self.fs - Lg)).to(preds.device)], axis=1)
+			kernels_long = torch.concatenate([kernels, torch.zeros((num_channels, self.fs - Lg)).to(kernels.device)], axis=1)
 			kernels_neg = torch.conj(kernels_long)
 			kernels_full = torch.concatenate([kernels_long, kernels_neg], dim=0)
 			kernels_hat = torch.sum(torch.abs(torch.fft.fft(kernels_full, dim=1)[:, :self.fs//2])**2, dim=0)
@@ -97,8 +96,8 @@ class ISACDual(nn.Module):
 
 def fit(kernel_max, num_channels, fc_max, fs, L, bwmul, scale, decoder_fit_eps, max_iter):
 	model = ISACDual(kernel_max, num_channels, fc_max, fs, L, bwmul, scale)
-	optimizer = optim.Adam(model.parameters(), lr=5e-4)
-	criterion = MSETight(beta=1e-7, fs=fs)
+	optimizer = optim.Adam(model.parameters(), lr=0.00001)
+	criterion = MSETight(beta=1e-8, fs=fs)
 
 	losses = []
 	kappas = []	
@@ -130,18 +129,44 @@ def fit(kernel_max, num_channels, fc_max, fs, L, bwmul, scale, decoder_fit_eps, 
 	
 	return model.decoder_kernels_real.detach(), model.decoder_kernels_imag.detach(), losses, kappas
 
+class ISACTight(nn.Module):
+	def __init__(self, kernel_max, num_channels, fc_max, fs, L, bwmul, scale):
+		super().__init__()
+		
+		[kernels, d, _, _, _, _, kernel_max, Ls] = audfilters(kernel_max=kernel_max, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, bwmul=bwmul, scale=scale)
+		self.kernels = kernels
+		self.stride = d
+		self.kernel_max = kernel_max
+		self.Ls = Ls
+
+		self.register_parameter('kernels_real', nn.Parameter(torch.real(kernels).to(torch.float32), requires_grad=True))
+		self.register_parameter('kernels_imag', nn.Parameter(torch.imag(kernels).to(torch.float32), requires_grad=True))
+
+	def forward(self):
+		k_real = self.kernels_real
+		k_imag = self.kernels_imag
+		
+		return k_real + 1j*k_imag
+	
+	@property
+	def condition_number(self):
+		filters = (self.kernels_real + 1j*self.kernels_imag).squeeze()
+		filters = F.pad(filters, (0, self.Ls - filters.shape[-1]), mode='constant', value=0)
+		return condition_number(filters, int(self.stride))
+
 
 def tight(kernel_max, num_channels, fc_max, fs, L, bwmul, scale, fit_eps, max_iter):
-	model = ISAC(kernel_max, num_channels, fc_max, fs, L, bwmul, scale, is_encoder_learnable=True)
-	optimizer = optim.Adam(model.parameters(), lr=5e-4)
-	criterion = MSETight(beta=1e-7, fs=fs)
+	model = ISACTight(kernel_max, num_channels, fc_max, fs, L, bwmul, scale)
+	optimizer = optim.Adam(model.parameters(), lr=0.00001)
+	criterion = MSETight(beta=1, fs=fs)
 
-	losses = []
+	print(f"Init Condition number: {model.condition_number}")
+
 	kappas = []	
 
 	loss_item = float('inf')
 	i = 0
-	print("Tightening ISAC. This might take a while ⛷️")
+	print("Tightening ISAC. This might take a while 🏂")
 	while loss_item >= fit_eps:
 		optimizer.zero_grad()
 		
@@ -158,6 +183,6 @@ def tight(kernel_max, num_channels, fc_max, fs, L, bwmul, scale, fit_eps, max_it
 			break
 		i += 1
 
-	print(f"Final Stats:\n\tFinal PSD ratio: {kappas[-1]}\n\tBest MSE loss: {losses[-1]}")
+	print(f"Init Condition number: {model.condition_number} and PSD ratio {kappas[-1]}")
 	
-	return model.decoder_kernels_real.detach(), model.decoder_kernels_imag.detach(), losses, kappas
+	return model.kernels_real.detach(), model.kernels_imag.detach(), kappas

@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from hybra.utils import audfilters, condition_number
 from hybra.utils import plot_response as plot_response_
 from hybra.utils import plot_coefficients as plot_coefficients_
-from hybra._fit_dual import fit
+from hybra._fit_dual import fit, tight
 
 class ISAC(nn.Module):
     def __init__(self,
@@ -17,10 +17,11 @@ class ISAC(nn.Module):
                  fs:int=16000, 
                  L:int=16000,
                  bwmul:float=1,
-                 scale:str='mel',
+                 scale:str='erb',
+                 tighten=False,
                  is_encoder_learnable=False,
                  use_decoder=False,
-                 is_decoder_learnable=False):
+                 is_decoder_learnable=False,):
         super().__init__()
 
         [kernels, d, fc, fc_min, fc_max, kernel_min, kernel_max, Ls] = audfilters(
@@ -40,6 +41,11 @@ class ISAC(nn.Module):
 
         kernels_real = kernels.real.to(torch.float32)
         kernels_imag = kernels.imag.to(torch.float32)
+        
+        if tighten:
+            max_iter = 1000
+            fit_eps = 1.0001
+            kernels_real, kernels_imag, _ = tight(kernel_max=kernel_max, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, bwmul=bwmul, scale=scale, fit_eps=fit_eps, max_iter=max_iter)
 
         if is_encoder_learnable:
             self.register_parameter('kernels_real', nn.Parameter(kernels_real, requires_grad=True))
