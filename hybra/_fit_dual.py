@@ -99,7 +99,7 @@ class ISACDual(nn.Module):
 
 def fit(kernels, d, Ls, fs, decoder_fit_eps, max_iter):
 	model = ISACDual(kernels, d, Ls)
-	optimizer = optim.Adam(model.parameters(), lr=0.00001)
+	optimizer = optim.Adam(model.parameters(), lr=5e-4)
 	criterion = MSETight(beta=1e-5, fs=fs)
 
 	losses = []
@@ -186,6 +186,6 @@ def tight(kernels, d, Ls, fs, fit_eps, max_iter):
 			break
 		i += 1
 
-	print(f"Init Condition number:\n\t{model.condition_number.item()}\nand PSD ratio\n\t{kappas[-1]}")
+	print(f"Final Condition number:\n\t{model.condition_number.item()}\nand PSD ratio\n\t{kappas[-1]}")
 	
 	return model.kernels_real.detach(), model.kernels_imag.detach(), kappas
