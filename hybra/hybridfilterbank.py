@@ -11,6 +11,7 @@ class HybrA(nn.Module):
                  kernel_size:Union[int,None]=128,
                  learned_kernel_size:int=16,
                  num_channels:int=40,
+                 stride:int=None,
                  fc_max:Union[float,int,None]=None,
                  fs:int=16000, 
                  L:int=16000,
@@ -23,6 +24,13 @@ class HybrA(nn.Module):
         [kernels, d, fc, _, _, _, kernel_size, Ls] = audfilters(
             kernel_size=kernel_size,num_channels=num_channels, fc_max=fc_max, fs=fs,L=L,bwmul=bwmul,scale=scale
         )
+
+        if stride is not None:
+            d = stride
+            Ls = int(torch.ceil(torch.tensor(L / d)) * d)
+            print(f"The output length is set to {Ls}.")
+        else:
+            print(f"The optimal stride for ISAC is {d} and the output length is set to {Ls}.")
 
         self.aud_kernels = kernels
         self.stride = d
@@ -47,7 +55,7 @@ class HybrA(nn.Module):
 
         if start_tight:
             learned_kernels = fir_tightener3000(
-                learned_kernels.squeeze(1), self.learned_kernel_size, D=d, eps=1.01, Ls=self.learned_kernel_size * d
+                learned_kernels.squeeze(1), self.learned_kernel_size, d=d, eps=1.01, Ls=self.learned_kernel_size * d
             ).to(torch.float32).unsqueeze(1)
             #learned_kernels = learned_kernels / torch.norm(learned_kernels, dim=-1, keepdim=True)
         

@@ -13,6 +13,7 @@ class ISACMelSpectrogram(nn.Module):
                  kernel_size:Union[int,None]=None,
                  num_channels:int=40,
                  fc_max:Union[float,int,None]=None,
+                 stride:int=None,
                  fs:int=16000, 
                  L:int=16000,
                  bwmul:float=1,
@@ -25,6 +26,11 @@ class ISACMelSpectrogram(nn.Module):
         [kernels, d, fc, fc_min, fc_max, kernel_min, kernel_size, Ls] = audfilters(
             kernel_size=kernel_size,num_channels=num_channels, fc_max=fc_max, fs=fs,L=L,bwmul=bwmul,scale=scale
         )
+
+        if stride is not None:
+            d = stride
+            Ls = int(torch.ceil(torch.tensor(L / d)) * d)
+        print(f"The output length is set to {Ls}.")
 
         self.kernels = kernels
         self.stride = d
