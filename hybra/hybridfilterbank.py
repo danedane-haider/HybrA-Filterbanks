@@ -8,26 +8,26 @@ from hybra.utils import plot_coefficients as plot_coefficients_
 
 class HybrA(nn.Module):
     def __init__(self,
-                 kernel_max:Union[int,None]=128,
+                 kernel_size:Union[int,None]=128,
+                 learned_kernel_size:int=16,
                  num_channels:int=40,
                  fc_max:Union[float,int,None]=None,
                  fs:int=16000, 
                  L:int=16000,
                  bwmul:float=1,
                  scale:str='erb',
-                 learned_kernel_size:int=16,
                  start_tight:bool=True):
         
         super().__init__()
 
-        [kernels, d, fc, _, _, _, kernel_max, Ls] = audfilters(
-            kernel_max=kernel_max,num_channels=num_channels, fc_max=fc_max, fs=fs,L=L,bwmul=bwmul,scale=scale
+        [kernels, d, fc, _, _, _, kernel_size, Ls] = audfilters(
+            kernel_size=kernel_size,num_channels=num_channels, fc_max=fc_max, fs=fs,L=L,bwmul=bwmul,scale=scale
         )
 
         self.aud_kernels = kernels
         self.stride = d
         self.fc = fc
-        self.kernel_max = kernel_max
+        self.kernel_size = kernel_size
         self.Ls = Ls
         self.fs = fs
         self.num_channels = num_channels
@@ -97,13 +97,13 @@ class HybrA(nn.Module):
         self.hybra_kernels_imag = kernel_imag.clone().detach()
         
         output_real = F.conv1d(
-            F.pad(x.unsqueeze(1), (self.kernel_max//2, self.kernel_max//2), mode='circular'),
+            F.pad(x.unsqueeze(1), (self.kernel_size//2, self.kernel_size//2), mode='circular'),
             kernel_real,
             stride=self.stride,
         )
         
         output_imag = F.conv1d(
-            F.pad(x.unsqueeze(1), (self.kernel_max//2,self.kernel_max//2), mode='circular'),
+            F.pad(x.unsqueeze(1), (self.kernel_size//2,self.kernel_size//2), mode='circular'),
             kernel_imag,
             stride=self.stride,
         )
@@ -115,11 +115,11 @@ class HybrA(nn.Module):
 
         """
         out = F.conv1d(
-                    F.pad(x.unsqueeze(1),(self.kernel_max//2, self.kernel_max//2), mode='circular'),
+                    F.pad(x.unsqueeze(1),(self.kernel_size//2, self.kernel_size//2), mode='circular'),
                     self.hybra_kernels_real.to(x.device),
                     stride=self.stride,
                 ) + 1j * F.conv1d(
-                    F.pad(x.unsqueeze(1),(self.kernel_max//2, self.kernel_max//2), mode='circular'),
+                    F.pad(x.unsqueeze(1),(self.kernel_size//2, self.kernel_size//2), mode='circular'),
                     self.hybra_kernels_imag.to(x.device),
                     stride=self.stride,
                 )
@@ -140,10 +140,10 @@ class HybrA(nn.Module):
         L_in = x_real.shape[-1]
         L_out = self.Ls
 
-        padding = self.kernel_max // 2
+        padding = self.kernel_size // 2
 
         # L_out = (L_in -1) * stride - 2 * padding + dialation * (kernel_size - 1) + output_padding + 1 ; dialation = 1
-        output_padding = L_out - (L_in - 1) * self.stride + 2 * padding - self.kernel_max
+        output_padding = L_out - (L_in - 1) * self.stride + 2 * padding - self.kernel_size
         
         x = (
             F.conv_transpose1d(

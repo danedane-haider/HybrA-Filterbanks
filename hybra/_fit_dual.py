@@ -54,9 +54,9 @@ class ISACDual(nn.Module):
 	def __init__(self, kernels, d, Ls):
 		super().__init__()
 		
-		#[kernels, d, _, _, _, _, kernel_max, Ls] = audfilters(kernel_max=kernel_max, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, bwmul=bwmul, scale=scale)
+		#[kernels, d, _, _, _, _, kernel_size, Ls] = audfilters(kernel_size=kernel_size, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, bwmul=bwmul, scale=scale)
 		self.stride = d
-		self.kernel_max = kernels.shape[-1]
+		self.kernel_size = kernels.shape[-1]
 		self.Ls = Ls
 		
 		self.register_buffer('kernels_real', torch.real(kernels).to(torch.float32))
@@ -67,7 +67,7 @@ class ISACDual(nn.Module):
 
 
 	def forward(self, x):
-		x = F.pad(x.unsqueeze(1), (self.kernel_max//2, self.kernel_max//2), mode='circular')
+		x = F.pad(x.unsqueeze(1), (self.kernel_size//2, self.kernel_size//2), mode='circular')
 		
 		x_real = F.conv1d(x, self.kernels_real.to(x.device).unsqueeze(1), stride=self.stride)
 		x_imag = F.conv1d(x, self.kernels_imag.to(x.device).unsqueeze(1), stride=self.stride)
@@ -75,7 +75,7 @@ class ISACDual(nn.Module):
 		L_in = x_real.shape[-1]
 		L_out = self.Ls
 
-		kernel_size = self.kernel_max
+		kernel_size = self.kernel_size
 		padding = kernel_size // 2
 
 		# L_out = (L_in -1) * stride - 2 * padding + dialation * (kernel_size - 1) + output_padding + 1 ; dialation = 1
@@ -136,10 +136,10 @@ class ISACTight(nn.Module):
 	def __init__(self, kernels, d, Ls):
 		super().__init__()
 		
-		#[kernels, d, _, _, _, _, kernel_max, Ls] = audfilters(kernel_max=kernel_max, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, bwmul=bwmul, scale=scale)
+		#[kernels, d, _, _, _, _, kernel_size, Ls] = audfilters(kernel_size=kernel_size, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, bwmul=bwmul, scale=scale)
 		#self.kernels = kernels
 		self.stride = d
-		self.kernel_max = kernels.shape[-1]
+		self.kernel_size = kernels.shape[-1]
 		self.Ls = Ls
 
 		self.register_parameter('kernels_real', nn.Parameter(torch.real(kernels).to(torch.float32), requires_grad=True))

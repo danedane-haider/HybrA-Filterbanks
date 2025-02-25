@@ -477,12 +477,12 @@ def modulate(g:torch.Tensor, fc:Union[float,int,torch.Tensor], fs:int):
 ####################################################################################################
 
 
-def audfilters(kernel_max:Union[int,None]=None, num_channels:int=96, fc_max:Union[float,int,None]=None, fs:int=16000, L:int=16000, bwmul:float=1, scale:str='erb') -> tuple[torch.Tensor, int, int, Union[int,float], Union[int,float], int, int, int]:
+def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Union[float,int,None]=None, fs:int=16000, L:int=16000, bwmul:float=1, scale:str='erb') -> tuple[torch.Tensor, int, int, Union[int,float], Union[int,float], int, int, int]:
     """
-    Generate FIR filter kernels with length *kernel_max* equidistantly spaced on auditory frequency scales.
+    Generate FIR filter kernels with length *kernel_size* equidistantly spaced on auditory frequency scales.
     
     Parameters:
-        kernel_max (int): Size of the filter kernels (equals maximum window length).
+        kernel_size (int): Size of the filter kernels (equals maximum window length).
         num_channels (int): Number of channels.
         fc_max (int): Maximum frequency (in Hz) that should lie on the aud scale.
         fs (int): Sampling rate.
@@ -498,7 +498,7 @@ def audfilters(kernel_max:Union[int,None]=None, num_channels:int=96, fc_max:Unio
             fc_min (int, float): First transition frequency.
             fc_max (int, float): Second transition frequency.
             kernel_min (int): Minimum kernel size.
-            kernel_max (int): Maximum kernel size.
+            kernel_size (int): Maximum kernel size.
             L (int): Admissible signal length.
     """
 
@@ -528,16 +528,16 @@ def audfilters(kernel_max:Union[int,None]=None, num_channels:int=96, fc_max:Unio
     ####################################################################################################
 
     # default values
-    if kernel_max is None:
+    if kernel_size is None:
         fc_full = audspace(0, fs//2, num_channels, scale)
         fsupp_min = fctobw(fc_full[1], scale) / bw_conversion * bwmul
-        kernel_max = int(torch.round(bw_conversion / fsupp_min * bw_factor))
+        kernel_size = int(torch.round(bw_conversion / fsupp_min * bw_factor))
     
     if fc_max is None:
         fc_max = fs // 2
 
     # get the bandwidth for the maximum kernel size and the associated center frequency
-    fsupp_low = bw_conversion / kernel_max * bw_factor
+    fsupp_low = bw_conversion / kernel_size * bw_factor
     fc_min = bwtofc(fsupp_low / bwmul * bw_conversion, scale)
 
     # get the bandwidth for the maximum center frequency and the associated kernel size
@@ -546,8 +546,8 @@ def audfilters(kernel_max:Union[int,None]=None, num_channels:int=96, fc_max:Unio
 
     if fc_min >= fc_max:
         fc_max = fc_min
-        kernel_min = kernel_max
-        Warning(f"fc_max was increased to {fc_min} to enable the kernel size of {kernel_max}.")
+        kernel_min = kernel_size
+        Warning(f"fc_max was increased to {fc_min} to enable the kernel size of {kernel_size}.")
 
     # get center frequencies
     [fc, _] = audspace_mod(fc_min, fc_max, fs, num_channels, scale)
@@ -561,7 +561,7 @@ def audfilters(kernel_max:Union[int,None]=None, num_channels:int=96, fc_max:Unio
     ####################################################################################################
 
     # get time supports
-    tsupp_low = (torch.ones(num_low) * kernel_max).int()
+    tsupp_low = (torch.ones(num_low) * kernel_size).int()
     tsupp_high = torch.ones(num_high) * kernel_min
     if num_low + num_high == num_channels:
         fsupp = fctobw(fc_max, scale) / bw_conversion * bwmul
@@ -580,15 +580,15 @@ def audfilters(kernel_max:Union[int,None]=None, num_channels:int=96, fc_max:Unio
     # Generate filters
     ####################################################################################################
 
-    g = torch.zeros((num_channels, kernel_max), dtype=torch.complex128)
+    g = torch.zeros((num_channels, kernel_size), dtype=torch.complex128)
 
-    g[0,:] = torch.sqrt(d) * firwin(kernel_max) / torch.sqrt(torch.tensor(2))
-    g[-1,:] = torch.sqrt(d) * modulate(firwin(tsupp[-1], kernel_max), fs//2, fs) / torch.sqrt(torch.tensor(2))
+    g[0,:] = torch.sqrt(d) * firwin(kernel_size) / torch.sqrt(torch.tensor(2))
+    g[-1,:] = torch.sqrt(d) * modulate(firwin(tsupp[-1], kernel_size), fs//2, fs) / torch.sqrt(torch.tensor(2))
 
     for m in range(1, num_channels - 1):
-        g[m,:] = torch.sqrt(d) * modulate(firwin(tsupp[m], kernel_max), fc[m], fs)
+        g[m,:] = torch.sqrt(d) * modulate(firwin(tsupp[m], kernel_size), fc[m], fs)
 
-    return g, int(d), fc, fc_min, fc_max, kernel_min, kernel_max, Ls
+    return g, int(d), fc, fc_min, fc_max, kernel_min, kernel_size, Ls
 
 ####################################################################################################
 ####################################################################################################
@@ -624,7 +624,7 @@ def plot_response(g, fs, scale='erb', plot_scale=False, fc_min=None, fc_max=None
         decoder (bool): Plot for the synthesis fb.
     """
     num_channels = g.shape[0]
-    kernel_max = g.shape[1]
+    kernel_size = g.shape[1]
 
     g_hat = response(g, fs)
     g_hat_pos = g_hat[:num_channels,:]
@@ -657,7 +657,7 @@ def plot_response(g, fs, scale='erb', plot_scale=False, fc_min=None, fc_max=None
         # text_y = auds[-1] 
         # plt.text(text_x, text_y, 'linear', color='black', ha='center', va='center', fontsize=12, alpha=0.75)
         # plt.text(text_x + fc_min - 1, text_y, 'ERB', color='black', ha='center', va='center', fontsize=12, alpha=0.75)
-        plt.title(f"ISAC Scale for {num_channels} channels. Max kernel size: {kernel_max}, Min kernel size: {kernel_min}")
+        plt.title(f"ISAC Scale for {num_channels} channels. Max kernel size: {kernel_size}, Min kernel size: {kernel_min}")
         plt.ylabel("Auditory Units")
         plt.legend(loc='lower right')
         plt.tight_layout()

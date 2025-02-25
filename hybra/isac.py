@@ -11,7 +11,7 @@ from hybra._fit_dual import fit, tight
 
 class ISAC(nn.Module):
     def __init__(self,
-                 kernel_max:Union[int,None]=128,
+                 kernel_size:Union[int,None]=128,
                  num_channels:int=40,
                  fc_max:Union[float,int,None]=None,
                  fs:int=16000, 
@@ -24,8 +24,8 @@ class ISAC(nn.Module):
                  is_decoder_learnable=False,):
         super().__init__()
 
-        [kernels, d, fc, fc_min, fc_max, kernel_min, kernel_max, Ls] = audfilters(
-            kernel_max=kernel_max,num_channels=num_channels, fc_max=fc_max, fs=fs,L=L,bwmul=bwmul,scale=scale
+        [kernels, d, fc, fc_min, fc_max, kernel_min, kernel_size, Ls] = audfilters(
+            kernel_size=kernel_size,num_channels=num_channels, fc_max=fc_max, fs=fs,L=L,bwmul=bwmul,scale=scale
         )
 
         self.kernels = kernels
@@ -34,7 +34,7 @@ class ISAC(nn.Module):
         self.fc_min = fc_min
         self.fc_max = fc_max
         self.kernel_min = kernel_min
-        self.kernel_max = kernel_max
+        self.kernel_size = kernel_size
         self.Ls = Ls
         self.fs = fs
         self.scale = scale
@@ -68,7 +68,7 @@ class ISAC(nn.Module):
                 self.register_buffer('decoder_kernels_imag', decoder_kernels_imag)
 
     def forward(self, x):
-        x = F.pad(x.unsqueeze(1), (self.kernel_max//2, self.kernel_max//2), mode='circular')
+        x = F.pad(x.unsqueeze(1), (self.kernel_size//2, self.kernel_size//2), mode='circular')
 
         out_real = F.conv1d(x, self.kernels_real.to(x.device).unsqueeze(1), stride=self.stride)
         out_imag = F.conv1d(x, self.kernels_imag.to(x.device).unsqueeze(1), stride=self.stride)
@@ -89,7 +89,7 @@ class ISAC(nn.Module):
         L_in = x_real.shape[-1]
         L_out = self.Ls
 
-        kernel_size = self.kernel_max
+        kernel_size = self.kernel_size
         padding = kernel_size // 2
 
         # L_out = (L_in -1) * stride - 2 * padding + dialation * (kernel_size - 1) + output_padding + 1 ; dialation = 1
