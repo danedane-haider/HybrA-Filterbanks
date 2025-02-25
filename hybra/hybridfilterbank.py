@@ -5,11 +5,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from hybra.utils import condition_number, fir_tightener3000, audfilters, plot_response
 from hybra.utils import plot_coefficients as plot_coefficients_
+from hybra._fit_dual import tight_hybra
 
 class HybrA(nn.Module):
     def __init__(self,
                  kernel_size:Union[int,None]=128,
-                 learned_kernel_size:int=16,
+                 learned_kernel_size:int=23,
                  num_channels:int=40,
                  stride:int=None,
                  fc_max:Union[float,int,None]=None,
@@ -17,7 +18,7 @@ class HybrA(nn.Module):
                  L:int=16000,
                  bwmul:float=1,
                  scale:str='erb',
-                 start_tight:bool=True):
+                 tighten:bool=True):
         
         super().__init__()
 
@@ -49,18 +50,21 @@ class HybrA(nn.Module):
         self.output_real_forward = None
         self.output_imag_forward = None
 
-        # Initialize trainable filters
-        k = torch.tensor(self.num_channels / (self.learned_kernel_size * self.num_channels))
-        learned_kernels = (-torch.sqrt(k) - torch.sqrt(k)) * torch.rand([self.num_channels, 1, self.learned_kernel_size]) + torch.sqrt(k)
+        # Initialize learned kernels
+        learned_kernels = torch.randn([self.num_channels, 1, self.learned_kernel_size])/torch.sqrt(torch.tensor(self.learned_kernel_size*self.num_channels))
+        #for i in range(self.num_channels):
+        #    idx = torch.randint(0, self.learned_kernel_size, (1,))
+        #    learned_kernels[i,0,idx] = 1.0
+        learned_kernels = learned_kernels / torch.norm(learned_kernels, p=1, dim=-1, keepdim=True)
 
-        if start_tight:
-            learned_kernels = fir_tightener3000(
-                learned_kernels.squeeze(1), self.learned_kernel_size, d=d, eps=1.01, Ls=self.learned_kernel_size * d
-            ).to(torch.float32).unsqueeze(1)
-            #learned_kernels = learned_kernels / torch.norm(learned_kernels, dim=-1, keepdim=True)
+        if tighten:
+            max_iter = 2500
+            fit_eps = 1.01
+            learned_kernels_real, learned_kernels_imag, _ = tight_hybra(
+                self.aud_kernels_real + 1j*self.aud_kernels_imag, learned_kernels, d, Ls, fs, fit_eps, max_iter)
         
-        self.learned_kernels_real = nn.Parameter(learned_kernels, requires_grad=True)
-        self.learned_kernels_imag = nn.Parameter(learned_kernels, requires_grad=True)
+        self.learned_kernels_real = nn.Parameter(learned_kernels_real, requires_grad=True)
+        self.learned_kernels_imag = nn.Parameter(learned_kernels_imag, requires_grad=True)
 
         # compute the initial hybrid filters
         self.hybra_kernels_real = F.conv1d(

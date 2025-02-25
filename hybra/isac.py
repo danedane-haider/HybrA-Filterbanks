@@ -54,7 +54,7 @@ class ISAC(nn.Module):
         
         if tighten:
             max_iter = 1000
-            fit_eps = 1.0001
+            fit_eps = 1.01
             k_real, k_imag, _ = tight(k_real+1j*k_imag, d, Ls, fs, fit_eps, max_iter)
 
         if is_encoder_learnable:
