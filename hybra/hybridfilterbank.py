@@ -76,7 +76,7 @@ class HybrA(nn.Module):
             learned_kernels = learned_kernels / torch.norm(learned_kernels, p=1, dim=-1, keepdim=True)
 
         if tighten:
-            max_iter = 2500
+            max_iter = 1000
             fit_eps = 1.01
             learned_kernels_real, learned_kernels_imag, _ = tight_hybra(
                 self.aud_kernels_real + 1j*self.aud_kernels_imag, learned_kernels, d, Ls, fs, fit_eps, max_iter)  
@@ -88,13 +88,13 @@ class HybrA(nn.Module):
 
         # compute the initial hybrid filters
         self.hybra_kernels_real = F.conv1d(
-            self.aud_kernels_real.squeeze(1),
+            self.aud_kernels_real.squeeze(1).to(self.learned_kernels_real.device),
             self.learned_kernels_real,
             groups=self.num_channels,
             padding="same",
         ).unsqueeze(1)
         self.hybra_kernels_imag = F.conv1d(
-            self.aud_kernels_imag.squeeze(1),
+            self.aud_kernels_imag.squeeze(1).to(self.learned_kernels_imag.device),
             self.learned_kernels_imag,
             groups=self.num_channels,
             padding="same",
@@ -114,7 +114,7 @@ class HybrA(nn.Module):
 
         kernel_real = F.conv1d(
             self.aud_kernels_real.to(x.device).squeeze(1),
-            self.learned_kernels_real,
+            self.learned_kernels_real.to(x.device),
             groups=self.num_channels,
             padding="same",
         ).unsqueeze(1)
@@ -122,7 +122,7 @@ class HybrA(nn.Module):
 
         kernel_imag = F.conv1d(
             self.aud_kernels_imag.to(x.device).squeeze(1),
-            self.learned_kernels_imag,
+            self.learned_kernels_imag.to(x.device),
             groups=self.num_channels,
             padding="same",
         ).unsqueeze(1)
@@ -199,16 +199,16 @@ class HybrA(nn.Module):
     def condition_number(self, learnable:bool=False):
         # coefficients = self.hybra_kernels_real.detach().clone().squeeze(1) + 1j* self.hybra_kernels_imag.detach().clone().squeeze(1)
         kernels = (self.hybra_kernels_real + 1j*self.hybra_kernels_imag).squeeze()
-        kernels = torch.cat([kernels, torch.conj(kernels)], dim=0)
+        #kernels = torch.cat([kernels, torch.conj(kernels)], dim=0)
         #kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
         if learnable:
             return condition_number(kernels, self.stride, self.Ls)
         else:
             return condition_number(kernels, self.stride, self.Ls).item()    
     def plot_response(self):
-        plot_response((self.hybra_kernels_real + 1j*self.hybra_kernels_imag).squeeze().detach().numpy(), self.fs)
+        plot_response((self.hybra_kernels_real + 1j*self.hybra_kernels_imag).squeeze().cpu().detach().numpy(), self.fs)
     def plot_decoder_response(self):
-        plot_response((self.hybra_kernels_real + 1j*self.hybra_kernels_imag).squeeze().detach().numpy(), self.fs, decoder=True)
+        plot_response((self.hybra_kernels_real + 1j*self.hybra_kernels_imag).squeeze().cpu().detach().numpy(), self.fs, decoder=True)
     def plot_coefficients(self, x):
         with torch.no_grad():
             coefficients = torch.log10(torch.abs(self.forward(x)[0]**2))

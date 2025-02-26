@@ -15,12 +15,7 @@ class MSETight(nn.Module):
 
     def forward(self, preds=None, target=None, kernels=None, d=None, Ls=None):
         if kernels is not None:
-            kernels_full = torch.cat([kernels, torch.conj(kernels)], dim=0)
-            kernels_hat = torch.sum(torch.abs(torch.fft.fft(kernels_full, self.fs, dim=1))**2, dim=0)
-            kappa = kernels_hat.max() / kernels_hat.min()
-            # padto = int(torch.ceil(torch.tensor(self.fs / d)) * d)
-            # kernels = F.pad(kernels, (0, Ls - kernels.shape[-1]), mode='constant', value=0)
-            # kappa = condition_number(kernels, int(d))
+            kappa = alias(kernels, d).to(kernels.device)
             if preds is not None:
                 loss = self.loss(preds, target)
                 return loss, loss + self.beta * (kappa - 1), kappa.item()
@@ -98,9 +93,17 @@ class ISACDual(nn.Module):
         return x.squeeze(1)
 
 def fit(kernels, d, Ls, fs, decoder_fit_eps, max_iter):
-    model = ISACDual(kernels, d, Ls)
-    optimizer = optim.Adam(model.parameters(), lr=5e-4)
-    criterion = MSETight(beta=1e-5, fs=fs)
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+    print(f"Device set to {device}")
+
+    model = ISACDual(kernels, d, Ls).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=0.00001)
+    criterion = MSETight(beta=1e-5, fs=fs).to(device)
 
     losses = []
     kappas = []	
@@ -110,7 +113,7 @@ def fit(kernels, d, Ls, fs, decoder_fit_eps, max_iter):
     print("Computing synthesis kernels for ISAC. This might take a bit ⛷️")
     while loss_item >= decoder_fit_eps:
         optimizer.zero_grad()
-        x_in = noise_uniform(model.Ls)
+        x_in = noise_uniform(model.Ls).to(device)
         x_out = model(x_in)
         
         w_real = model.decoder_kernels_real.squeeze()
@@ -123,7 +126,7 @@ def fit(kernels, d, Ls, fs, decoder_fit_eps, max_iter):
         kappas.append(kappa)
 
         if i > max_iter:
-            warnings.warn(f"Did not converge after {max_iter} iterations.")
+            print(f"Max. iteration of {max_iter} reached.")
             break
         i += 1
 
@@ -154,14 +157,22 @@ class ISACTight(nn.Module):
     @property
     def condition_number(self):
         kernels = (self.kernels_real + 1j*self.kernels_imag).squeeze()
-        kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
+        #kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
         return condition_number(kernels, int(self.stride), self.Ls)
 
 
 def tight(kernels, d, Ls, fs, fit_eps, max_iter):
-    model = ISACTight(kernels, d, Ls)
-    optimizer = optim.Adam(model.parameters(), lr=0.00001)
-    criterion = MSETight(beta=1, fs=fs)
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+    print(f"Device set to {device}")
+
+    model = ISACTight(kernels, d, Ls).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=0.01)
+    criterion = MSETight(beta=1, fs=fs).to(device)
 
     print(f"Init Condition number:\n\t{model.condition_number.item()}")
 
@@ -182,11 +193,11 @@ def tight(kernels, d, Ls, fs, fit_eps, max_iter):
         kappas.append(kappa_item)
 
         if i > max_iter:
-            warnings.warn(f"Did not converge after {max_iter} iterations.")
+            print(f"Max. iteration of {max_iter} reached.")
             break
         i += 1
 
-    print(f"Final Condition number:\n\t{model.condition_number.item()}\nand PSD ratio\n\t{kappas[-1]}")
+    print(f"Final Condition number:\n\t{model.condition_number.item()}")
     
     return model.kernels_real.detach(), model.kernels_imag.detach(), kappas
 
@@ -242,13 +253,21 @@ class HybrATight(nn.Module):
     @property
     def condition_number(self):
         kernels = (self.hybra_kernels_real + 1j*self.hybra_kernels_imag).squeeze()
-        kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
+        #kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
         return condition_number(kernels, int(self.stride), self.Ls)
     
 def tight_hybra(aud_kernels, learned_kernels, d, Ls, fs, fit_eps, max_iter):
-    model = HybrATight(aud_kernels, learned_kernels, d, Ls)
-    optimizer = optim.Adam(model.parameters(), lr=0.00001)
-    criterion = MSETight(beta=1, fs=fs)
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+    print(f"Device set to {device}")
+
+    model = HybrATight(aud_kernels, learned_kernels, d, Ls).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    criterion = MSETight(beta=1, fs=fs).to(device)
 
     print(f"Init Condition number:\n\t{model.condition_number.item()}")
 
@@ -269,10 +288,10 @@ def tight_hybra(aud_kernels, learned_kernels, d, Ls, fs, fit_eps, max_iter):
         kappas.append(kappa_item)
 
         if i > max_iter:
-            warnings.warn(f"Did not converge after {max_iter} iterations.")
+            print(f"Max. iteration of {max_iter} reached.")
             break
         i += 1
 
-    print(f"Final Condition number:\n\t{model.condition_number.item()}\nand PSD ratio\n\t{kappas[-1]}")
+    print(f"Final Condition number:\n\t{model.condition_number.item()}")
     
     return model.learned_kernels_real.detach(), model.learned_kernels_imag.detach(), kappas

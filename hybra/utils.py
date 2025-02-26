@@ -19,12 +19,11 @@ def frame_bounds(w:torch.Tensor, d:int, Ls:int=None) -> Tuple[torch.Tensor, torc
             A, B: Frame bounds
     """
     if Ls is None:
-        Ls = w.shape[-1]
+        Ls = int(torch.ceil(torch.tensor(w.shape[-1] * 2 / d)) * d)
     w_full = torch.cat([w, torch.conj(w)], dim=0) 
-    w_hat = torch.fft.fft(w_full, Ls, dim=-1)
-    w_hat = w_hat.T
+    w_hat = torch.fft.fft(w_full, Ls, dim=-1).T
     if d == 1:
-        psd = torch.sum(w_hat.abs() ** 2, dim=1)
+        psd = torch.sum(w_hat.abs() ** 2, dim=-1)
         A = torch.min(psd)
         B = torch.max(psd)
         return A, B
@@ -66,7 +65,46 @@ def condition_number(w:torch.Tensor, d:int, Ls:int=None) -> torch.Tensor:
     A, B = frame_bounds(w, d, Ls)
     return B / A
 
-def can_tight(w:torch.Tensor, d:int) -> torch.Tensor:
+def frequency_correlation(w:torch.Tensor, d:int, Ls:int=None, diag_only:bool=False) -> torch.Tensor:
+    """
+    Computes the frequency correlation functions.
+    Parameters:
+        w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[num_channels, sig_length]
+        d (int): Decimation factor, must divide filter length!
+    Output:
+        G: (Ls x d) matrix with frequency correlations as columns
+    """
+    if Ls is None:
+        Ls = int(torch.ceil(torch.tensor(w.shape[-1] * 2 / d)) * d)
+    w_full = torch.cat([w, torch.conj(w)], dim=0) 
+    w_hat = torch.fft.fft(w_full, Ls, dim=-1).T
+    N = Ls
+    assert N % d == 0, "Oh no! Decimation factor must divide signal length!"
+    G = torch.zeros(N, d, dtype=w_hat.dtype)
+    G[:,0] = torch.sum(w_hat.abs()**2, dim=-1)
+    if diag_only:
+        return torch.real(G[:,0])
+    else:
+        for j in range(1,d):
+            G[:,j] = torch.sum(w_hat * torch.conj(w_hat.roll(j * N//d, 0)), dim=1)
+        return G.T
+
+def alias(w:torch.Tensor, d:int, Ls:Union[int,None]=None, diag_only:bool=False) -> torch.Tensor:
+    """
+    Computes the norm of the aliasing terms.
+    Parameters:
+        w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[num_channels, sig_length]
+        d: Decimation factor, must divide filter length!
+    Output:
+        A: Energy of the aliasing terms
+    """
+    G = frequency_correlation(w=w, d=d, Ls=Ls, diag_only=diag_only)
+    if diag_only:
+        return torch.max(G).div(torch.min(G))
+    else:
+        return torch.max(torch.real(G[0,:])).div(torch.min(torch.real(G[0,:]))) + torch.sum(torch.max(G[1::,:].abs(), dim=-1)[0])
+
+def can_tight(w:torch.Tensor, d:int, Ls:int) -> torch.Tensor:
     """
     Computes the canonical tight filterbank of w (time domain) using the polyphase representation.
     Parameters:
@@ -75,7 +113,7 @@ def can_tight(w:torch.Tensor, d:int) -> torch.Tensor:
     Returns:
         W: Canonical tight filterbank of W (torch.tensor[num_channels, signal_length])
     """
-    w_hat = torch.fft.fft(w.T, dim=0)
+    w_hat = torch.fft.fft(w.T, Ls, dim=0)
     if d == 1:
         lp = torch.sum(w_hat.abs() ** 2, dim=1).reshape(-1,1)
         w_hat_tight = w_hat * (lp ** (-0.5))
@@ -93,44 +131,6 @@ def can_tight(w:torch.Tensor, d:int) -> torch.Tensor:
             H = U @ V
             w_hat_tight[:,idx] = H.T.to(torch.complex64)
         return torch.fft.ifft(torch.fft.ifft(w_hat_tight.T, dim=1) * d ** 0.5, dim=0).T
-
-def frequency_correlation(w:torch.Tensor, d:int, padto:Union[int,None]=None, diag_only:bool=False) -> torch.Tensor:
-    """
-    Computes the frequency correlation functions.
-    Parameters:
-        w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[num_channels, sig_length]
-        d (int): Decimation factor, must divide filter length!
-    Output:
-        G: (length x d) matrix with aliasing terms as columns
-    """
-    if padto is not None:
-        w = torch.cat([w, torch.zeros(w.shape[0], padto-w.shape[1]).to(w.device)], dim=1)
-    w_hat = torch.fft.fft(w, dim=-1).T
-    N = w_hat.shape[0]
-    assert N % d == 0, "Oh no! Decimation factor must divide signal length!"
-    G = torch.zeros(N, d, dtype=w_hat.dtype)
-    G[:,0] = torch.sum(torch.abs(w_hat)**2, dim=1)
-    if diag_only:
-        return torch.real(G[:,0])
-    else:
-        for j in range(1,d):
-            G[:,j] = torch.sum(w_hat * torch.conj(w_hat.roll(j * N//d, 0)), dim=1)
-        return G.T
-
-def alias(w:torch.Tensor, d:int, padto:Union[int,None]=None, diag_only:bool=False) -> torch.Tensor:
-    """
-    Computes the norm of the aliasing terms.
-    Parameters:
-        w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[num_channels, sig_length]
-        d: Decimation factor, must divide filter length!
-    Output:
-        A: Energy of the aliasing terms
-    """
-    G = frequency_correlation(w=w, d=d, padto=padto, diag_only=diag_only)
-    if diag_only:
-        return torch.max(G[:16000//2]).div(torch.min(G[:16000//2]))
-    else:
-        return torch.max(torch.real(G[0,:])).div(torch.min(torch.real(G[0,:]))) + torch.sum(torch.norm(G[1::,:], dim=-1)**2)
 
 def fir_tightener3000(w:torch.Tensor, supp:int, d:int, eps:float=1.01, Ls:Union[int,None]=None):
     """
