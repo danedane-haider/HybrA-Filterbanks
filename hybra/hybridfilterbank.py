@@ -9,16 +9,33 @@ from hybra._fit_dual import tight_hybra
 
 class HybrA(nn.Module):
     def __init__(self,
-                 kernel_size:Union[int,None]=128,
+                 kernel_size:int=128,
                  learned_kernel_size:int=23,
                  num_channels:int=40,
                  stride:int=None,
-                 fc_max:Union[float,int,None]=None,
+                 fc_max:Union[float,int]=None,
                  fs:int=16000, 
                  L:int=16000,
                  bwmul:float=1,
                  scale:str='erb',
-                 tighten:bool=True):
+                 tighten:bool=True,
+                 det_init:bool=False):
+        """HybrA filterbank.
+
+        Parameters:
+        -----------
+        kernel_size (int) - size of the kernela
+        learned_kernel_size (int) - size of the learned kernels
+        num_channels (int) - number of channels
+        stride (int) - stride of the convolutional layers
+        fc_max (float) - maximum frequency on the auditory scale
+        fs (int) - sampling frequency
+        L (int) - signal length
+        bwmul (float) - bandwidth multiplier
+        scale (str) - auditory scale ('erb', 'mel', 'bark', 'log)
+        tighten (bool) - whether to tighten the hybrid filterbank
+        det_init (bool) - whether to initialize the learned filters with diracs
+        """
         
         super().__init__()
 
@@ -51,20 +68,23 @@ class HybrA(nn.Module):
         self.output_imag_forward = None
 
         # Initialize learned kernels
-        learned_kernels = torch.randn([self.num_channels, 1, self.learned_kernel_size])/torch.sqrt(torch.tensor(self.learned_kernel_size*self.num_channels))
-        #for i in range(self.num_channels):
-        #    idx = torch.randint(0, self.learned_kernel_size, (1,))
-        #    learned_kernels[i,0,idx] = 1.0
-        learned_kernels = learned_kernels / torch.norm(learned_kernels, p=1, dim=-1, keepdim=True)
+        if det_init:
+            learned_kernels = torch.zeros([self.num_channels, 1, self.learned_kernel_size])
+            learned_kernels[:,0,0] = 1.0
+        else:
+            learned_kernels = torch.randn([self.num_channels, 1, self.learned_kernel_size])/torch.sqrt(torch.tensor(self.learned_kernel_size*self.num_channels))
+            learned_kernels = learned_kernels / torch.norm(learned_kernels, p=1, dim=-1, keepdim=True)
 
         if tighten:
             max_iter = 2500
             fit_eps = 1.01
             learned_kernels_real, learned_kernels_imag, _ = tight_hybra(
-                self.aud_kernels_real + 1j*self.aud_kernels_imag, learned_kernels, d, Ls, fs, fit_eps, max_iter)
-        
-        self.learned_kernels_real = nn.Parameter(learned_kernels_real, requires_grad=True)
-        self.learned_kernels_imag = nn.Parameter(learned_kernels_imag, requires_grad=True)
+                self.aud_kernels_real + 1j*self.aud_kernels_imag, learned_kernels, d, Ls, fs, fit_eps, max_iter)  
+            self.learned_kernels_real = nn.Parameter(learned_kernels_real, requires_grad=True)
+            self.learned_kernels_imag = nn.Parameter(learned_kernels_imag, requires_grad=True)
+        else:
+            self.learned_kernels_real = nn.Parameter(learned_kernels, requires_grad=True)
+            self.learned_kernels_imag = nn.Parameter(learned_kernels, requires_grad=True)
 
         # compute the initial hybrid filters
         self.hybra_kernels_real = F.conv1d(
@@ -179,11 +199,12 @@ class HybrA(nn.Module):
     def condition_number(self, learnable:bool=False):
         # coefficients = self.hybra_kernels_real.detach().clone().squeeze(1) + 1j* self.hybra_kernels_imag.detach().clone().squeeze(1)
         kernels = (self.hybra_kernels_real + 1j*self.hybra_kernels_imag).squeeze()
-        kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
+        kernels = torch.cat([kernels, torch.conj(kernels)], dim=0)
+        #kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
         if learnable:
-            return condition_number(kernels, self.stride)
+            return condition_number(kernels, self.stride, self.Ls)
         else:
-            return condition_number(kernels, self.stride).item()    
+            return condition_number(kernels, self.stride, self.Ls).item()    
     def plot_response(self):
         plot_response((self.hybra_kernels_real + 1j*self.hybra_kernels_imag).squeeze().detach().numpy(), self.fs)
     def plot_decoder_response(self):

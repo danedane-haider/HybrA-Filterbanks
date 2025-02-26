@@ -15,16 +15,12 @@ class MSETight(nn.Module):
 
     def forward(self, preds=None, target=None, kernels=None, d=None, Ls=None):
         if kernels is not None:
-            Lg = kernels.shape[-1]
-            num_channels = kernels.shape[0]
-            kernels_long = torch.concatenate([kernels, torch.zeros((num_channels, self.fs - Lg)).to(kernels.device)], axis=1)
-            kernels_neg = torch.conj(kernels_long)
-            kernels_full = torch.concatenate([kernels_long, kernels_neg], dim=0)
-            kernels_hat = torch.sum(torch.abs(torch.fft.fft(kernels_full, dim=1)[:, :self.fs//2])**2, dim=0)
+            kernels_full = torch.cat([kernels, torch.conj(kernels)], dim=0)
+            kernels_hat = torch.sum(torch.abs(torch.fft.fft(kernels_full, self.fs, dim=1))**2, dim=0)
             kappa = kernels_hat.max() / kernels_hat.min()
             # padto = int(torch.ceil(torch.tensor(self.fs / d)) * d)
-            #kernels = F.pad(kernels, (0, Ls - kernels.shape[-1]), mode='constant', value=0)
-            #kappa = condition_number(kernels, int(d))
+            # kernels = F.pad(kernels, (0, Ls - kernels.shape[-1]), mode='constant', value=0)
+            # kappa = condition_number(kernels, int(d))
             if preds is not None:
                 loss = self.loss(preds, target)
                 return loss, loss + self.beta * (kappa - 1), kappa.item()
@@ -111,7 +107,7 @@ def fit(kernels, d, Ls, fs, decoder_fit_eps, max_iter):
 
     loss_item = float('inf')
     i = 0
-    print("Computing synthesis kernels for ISAC. This might take a while ⛷️")
+    print("Computing synthesis kernels for ISAC. This might take a bit ⛷️")
     while loss_item >= decoder_fit_eps:
         optimizer.zero_grad()
         x_in = noise_uniform(model.Ls)
@@ -159,7 +155,7 @@ class ISACTight(nn.Module):
     def condition_number(self):
         kernels = (self.kernels_real + 1j*self.kernels_imag).squeeze()
         kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
-        return condition_number(kernels, int(self.stride))
+        return condition_number(kernels, int(self.stride), self.Ls)
 
 
 def tight(kernels, d, Ls, fs, fit_eps, max_iter):
@@ -173,7 +169,7 @@ def tight(kernels, d, Ls, fs, fit_eps, max_iter):
 
     loss_item = float('inf')
     i = 0
-    print("Tightening ISAC. This might take a while 🏂")
+    print("Tightening ISAC. This might take a bit 🏂")
     while loss_item >= fit_eps:
         optimizer.zero_grad()
         model()
@@ -247,11 +243,11 @@ class HybrATight(nn.Module):
     def condition_number(self):
         kernels = (self.hybra_kernels_real + 1j*self.hybra_kernels_imag).squeeze()
         kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
-        return condition_number(kernels, int(self.stride))
+        return condition_number(kernels, int(self.stride), self.Ls)
     
 def tight_hybra(aud_kernels, learned_kernels, d, Ls, fs, fit_eps, max_iter):
     model = HybrATight(aud_kernels, learned_kernels, d, Ls)
-    optimizer = optim.Adam(model.parameters(), lr=0.0001)
+    optimizer = optim.Adam(model.parameters(), lr=0.00001)
     criterion = MSETight(beta=1, fs=fs)
 
     print(f"Init Condition number:\n\t{model.condition_number.item()}")
@@ -260,7 +256,7 @@ def tight_hybra(aud_kernels, learned_kernels, d, Ls, fs, fit_eps, max_iter):
 
     loss_item = float('inf')
     i = 0
-    print("Tightening HybrA. This might take a while 🏄")
+    print("Tightening HybrA. This might take a bit 🏄")
     while loss_item >= fit_eps:
         optimizer.zero_grad()
         model()

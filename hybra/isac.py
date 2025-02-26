@@ -140,11 +140,11 @@ class ISAC(nn.Module):
     @property
     def condition_number(self):
         kernels = (self.kernels_real + 1j*self.kernels_imag).squeeze()
-        kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
-        return condition_number(kernels, int(self.stride))
+        #kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
+        return condition_number(kernels, int(self.stride), self.Ls)
     
     @property
     def condition_number_decoder(self):
         kernels = (self.decoder_kernels_real + 1j*self.decoder_kernels_imag).squeeze()
-        kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
-        return condition_number(kernels, int(self.stride))
+        #kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
+        return condition_number(kernels, int(self.stride), self.Ls)

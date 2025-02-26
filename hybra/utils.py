@@ -8,7 +8,7 @@ from typing import Union, Tuple
 ##################### Cool routines to study decimated filterbanks #################################
 ####################################################################################################
 
-def frame_bounds(w:torch.Tensor, d:int) -> Tuple[torch.Tensor, torch.Tensor]:
+def frame_bounds(w:torch.Tensor, d:int, Ls:int=None) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Computes the frame bounds of a filterbank given in impulse responses using the polyphase representation.
     Parameters:
@@ -18,11 +18,15 @@ def frame_bounds(w:torch.Tensor, d:int) -> Tuple[torch.Tensor, torch.Tensor]:
         tuple:
             A, B: Frame bounds
     """
-    w_hat = torch.fft.fft(w, dim=-1).T
+    if Ls is None:
+        Ls = w.shape[-1]
+    w_full = torch.cat([w, torch.conj(w)], dim=0) 
+    w_hat = torch.fft.fft(w_full, Ls, dim=-1)
+    w_hat = w_hat.T
     if d == 1:
-        lp = torch.sum(w_hat.abs() ** 2, dim=1)
-        A = torch.min(lp)
-        B = torch.max(lp)
+        psd = torch.sum(w_hat.abs() ** 2, dim=1)
+        A = torch.min(psd)
+        B = torch.max(psd)
         return A, B
     else:
         N = w_hat.shape[0]
@@ -48,9 +52,9 @@ def frame_bounds(w:torch.Tensor, d:int) -> Tuple[torch.Tensor, torch.Tensor]:
             lam = torch.linalg.eigvalsh(Ha @ Ha.H + Hb @ Hb.H).real
             A = torch.min(A, torch.min(lam))
             B = torch.max(B, torch.max(lam))
-        return A/d, B/d
+        return (A/d).to(w_hat.device), (B/d).to(w_hat.device)
 
-def condition_number(w:torch.Tensor, d:int) -> torch.Tensor:
+def condition_number(w:torch.Tensor, d:int, Ls:int=None) -> torch.Tensor:
     """
     Computes the condition number of a filterbank.
     Parameters:
@@ -59,7 +63,7 @@ def condition_number(w:torch.Tensor, d:int) -> torch.Tensor:
     Returns:
         kappa: Condition number
     """
-    A, B = frame_bounds(w, d)
+    A, B = frame_bounds(w, d, Ls)
     return B / A
 
 def can_tight(w:torch.Tensor, d:int) -> torch.Tensor:
@@ -601,12 +605,8 @@ def response(g, fs):
         g (numpy.Array): Filter kernels.
         fs (int): Sampling rate for plotting Hz.
     """
-    Lg = g.shape[-1]
-    num_channels = g.shape[0]
-    g_long = np.concatenate([g, np.zeros((num_channels, int(fs) - Lg))], axis=1)
-    g_neg = np.conj(g_long)
-    g_full = np.concatenate([g_long, g_neg], axis=0)
-    G = np.abs(np.fft.fft(g_full, axis=1)[:,:fs//2])**2
+    g_full = np.concatenate([g, np.conj(g)], axis=0)
+    G = np.abs(np.fft.fft(g_full, fs, axis=1)[:,:fs//2])**2
 
     return G
 
