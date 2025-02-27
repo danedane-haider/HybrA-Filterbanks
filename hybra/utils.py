@@ -197,7 +197,7 @@ def freqtoaud(freq:Union[float,int,torch.Tensor], scale:str="erb"):
 
     elif scale == "log10":
         # Logarithmic scale
-        return torch.log10(freq)
+        return torch.log10(torch.maximum(torch.ones(1),freq))
 
     else:
         raise ValueError(f"Unsupported scale: '{scale}'. Available options are: 'mel', 'erb', 'bark', 'log10'.")
@@ -252,6 +252,8 @@ def audspace(fmin:Union[float,int,torch.Tensor], fmax:Union[float,int,torch.Tens
         raise ValueError("fmin must be less than or equal to fmax.")
 
     # Convert [fmin, fmax] to auditory scale
+    if scale == "log10":
+        fmin = torch.maximum(torch.ones(fmin),torch.ones(1))
     audlimits = freqtoaud(torch.tensor([fmin, fmax]), scale)
 
     # Generate frequencies spaced evenly on the auditory scale
@@ -518,13 +520,16 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
     gf_probe = torch.fft.fft(g_probe) / torch.max(torch.abs(torch.fft.fft(g_probe)))
 
     # compute ERB-type bandwidth of the prototype
-    bw_conversion = torch.norm(gf_probe)**2 * probeLg / probeLs / 4
-    if scale in ['erb','bark']:
-        bw_factor = fs * 10.64
+    if scale == 'erb':
+        bw_factor = 1.25 
     elif scale == 'mel':
-        bw_factor = fs / 12
+        bw_factor = 17.5
     elif scale == 'log10':
-        bw_factor = fs * 0.001
+        bw_factor = 0.4
+    elif scale == 'bark':
+        bw_factor = 1
+    
+    bw_conversion = torch.norm(gf_probe)**2 * probeLg / probeLs / bw_factor
     
     
     ####################################################################################################
@@ -534,19 +539,19 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
     # default values
     if kernel_size is None:
         fc_full = audspace(0, fs//2, num_channels, scale)
-        fsupp_min = fctobw(fc_full[1], scale) / bw_conversion * bwmul
-        kernel_size = int(torch.round(bw_conversion / fsupp_min * bw_factor))
+        fsupp_min = fctobw(fc_full[1], scale) / bw_conversion
+        kernel_size = int(torch.round(bw_conversion / fsupp_min * fs))
     
     if fc_max is None:
         fc_max = fs // 2
 
     # get the bandwidth for the maximum kernel size and the associated center frequency
-    fsupp_low = bw_conversion / kernel_size * bw_factor
-    fc_min = bwtofc(fsupp_low / bwmul * bw_conversion, scale)
+    fsupp_low = bw_conversion / kernel_size * fs
+    fc_min = bwtofc(fsupp_low * bw_conversion, scale)
 
     # get the bandwidth for the maximum center frequency and the associated kernel size
-    fsupp_high = fctobw(fc_max, scale) / bw_conversion * bwmul
-    kernel_min = int(torch.round(bw_conversion / fsupp_high * bw_factor))
+    fsupp_high = fctobw(fc_max, scale) / bw_conversion
+    kernel_min = int(torch.round(bw_conversion / fsupp_high * fs))
 
     if fc_min >= fc_max:
         fc_max = fc_min
@@ -568,17 +573,17 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
     tsupp_low = (torch.ones(num_low) * kernel_size).int()
     tsupp_high = torch.ones(num_high) * kernel_min
     if num_low + num_high == num_channels:
-        fsupp = fctobw(fc_max, scale) / bw_conversion * bwmul
+        fsupp = fctobw(fc_max, scale) / bw_conversion
         tsupp = tsupp_low
     else:
-        fsupp = fctobw(fc[num_low:num_low+num_aud], scale) / bw_conversion * bwmul
-        tsupp_aud = torch.round(bw_conversion / fsupp * bw_factor)
+        fsupp = fctobw(fc[num_low:num_low+num_aud], scale) / bw_conversion
+        tsupp_aud = torch.round(bw_conversion / fsupp * fs)
         tsupp = torch.concatenate([tsupp_low, tsupp_aud, tsupp_high]).int()
 
     # Decimation factor (stride) to get a nice frame and according signal length (lcm of d and Ls)
-    d = torch.floor(torch.min(fs / fsupp))
-    #d = kernel_min // 2
-    Ls = int(torch.ceil(L / d) * d)
+    # d = torch.floor(torch.min(fs / fsupp))
+    d = torch.tensor(kernel_min // 4)
+    Ls = int(torch.ceil(torch.tensor(L / d)) * d)
 
     ####################################################################################################
     # Generate filters

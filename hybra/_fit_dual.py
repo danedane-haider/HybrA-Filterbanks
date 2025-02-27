@@ -7,15 +7,16 @@ import warnings
 from hybra.utils import audfilters, condition_number, alias
 
 class MSETight(nn.Module):
-    def __init__(self, beta:float=0.0, fs:int=16000):
+    def __init__(self, beta:float=0.0, fs:int=16000, diag_only:bool=False):
         super().__init__()
         self.beta = beta
         self.loss = nn.MSELoss()
         self.fs = fs
+        self.diag_only = diag_only
 
     def forward(self, preds=None, target=None, kernels=None, d=None, Ls=None):
         if kernels is not None:
-            kappa = alias(kernels, d).to(kernels.device)
+            kappa = alias(kernels, d, diag_only=self.diag_only).to(kernels.device)
             if preds is not None:
                 loss = self.loss(preds, target)
                 return loss, loss + self.beta * (kappa - 1), kappa.item()
@@ -102,8 +103,8 @@ def fit(kernels, d, Ls, fs, decoder_fit_eps, max_iter):
     print(f"Device set to {device}")
 
     model = ISACDual(kernels, d, Ls).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=0.00001)
-    criterion = MSETight(beta=1e-5, fs=fs).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=1e-5)
+    criterion = MSETight(beta=1e-8, fs=fs, diag_only=True).to(device)
 
     losses = []
     kappas = []	
@@ -119,7 +120,7 @@ def fit(kernels, d, Ls, fs, decoder_fit_eps, max_iter):
         w_real = model.decoder_kernels_real.squeeze()
         w_imag = model.decoder_kernels_imag.squeeze()
         
-        loss, loss_tight, kappa = criterion(x_out, x_in, w_real + 1j*w_imag)
+        loss, loss_tight, kappa = criterion(x_out, x_in, w_real + 1j*w_imag, d=d, Ls=None)
         loss_tight.backward()
         optimizer.step()
         losses.append(loss.item())
@@ -171,7 +172,7 @@ def tight(kernels, d, Ls, fs, fit_eps, max_iter):
     print(f"Device set to {device}")
 
     model = ISACTight(kernels, d, Ls).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=0.01)
+    optimizer = optim.Adam(model.parameters(), lr=0.00001)
     criterion = MSETight(beta=1, fs=fs).to(device)
 
     print(f"Init Condition number:\n\t{model.condition_number.item()}")
@@ -187,7 +188,7 @@ def tight(kernels, d, Ls, fs, fit_eps, max_iter):
         kernels_real = model.kernels_real.squeeze()
         kernels_imag = model.kernels_imag.squeeze()
         
-        kappa, kappa_item = criterion(preds=None, target=None, kernels=kernels_real + 1j*kernels_imag, d=d, Ls=Ls)
+        kappa, kappa_item = criterion(preds=None, target=None, kernels=kernels_real + 1j*kernels_imag, d=d, Ls=None)
         kappa.backward()
         optimizer.step()
         kappas.append(kappa_item)
@@ -282,7 +283,7 @@ def tight_hybra(aud_kernels, learned_kernels, d, Ls, fs, fit_eps, max_iter):
         kernels_real = model.hybra_kernels_real.squeeze()
         kernels_imag = model.hybra_kernels_imag.squeeze()
         
-        kappa, kappa_item = criterion(preds=None, target=None, kernels=kernels_real + 1j*kernels_imag, d=d, Ls=Ls)
+        kappa, kappa_item = criterion(preds=None, target=None, kernels=kernels_real + 1j*kernels_imag, d=d, Ls=None)
         kappa.backward()
         optimizer.step()
         kappas.append(kappa_item)
