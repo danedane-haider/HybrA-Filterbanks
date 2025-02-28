@@ -16,7 +16,7 @@ class HybrA(nn.Module):
                  fc_max:Union[float,int]=None,
                  fs:int=16000, 
                  L:int=16000,
-                 bwmul:float=1,
+                 bw_multiplier:float=1,
                  scale:str='erb',
                  tighten:bool=True,
                  det_init:bool=False):
@@ -31,7 +31,7 @@ class HybrA(nn.Module):
         fc_max (float) - maximum frequency on the auditory scale
         fs (int) - sampling frequency
         L (int) - signal length
-        bwmul (float) - bandwidth multiplier
+        bw_multiplier (float) - bandwidth multiplier
         scale (str) - auditory scale ('erb', 'mel', 'bark', 'log)
         tighten (bool) - whether to tighten the hybrid filterbank
         det_init (bool) - whether to initialize the learned filters with diracs
@@ -40,7 +40,7 @@ class HybrA(nn.Module):
         super().__init__()
 
         [kernels, d, fc, _, _, _, kernel_size, Ls] = audfilters(
-            kernel_size=kernel_size,num_channels=num_channels, fc_max=fc_max, fs=fs,L=L,bwmul=bwmul,scale=scale
+            kernel_size=kernel_size, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, bw_multiplier=bw_multiplier, scale=scale
         )
 
         if stride is not None:

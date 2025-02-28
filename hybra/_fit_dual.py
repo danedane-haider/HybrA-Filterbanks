@@ -50,7 +50,7 @@ class ISACDual(nn.Module):
     def __init__(self, kernels, d, Ls):
         super().__init__()
         
-        #[kernels, d, _, _, _, _, kernel_size, Ls] = audfilters(kernel_size=kernel_size, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, bwmul=bwmul, scale=scale)
+        #[kernels, d, _, _, _, _, kernel_size, Ls] = audfilters(kernel_size=kernel_size, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, bw_multiplier=bw_multiplier, scale=scale)
         self.stride = d
         self.kernel_size = kernels.shape[-1]
         self.Ls = Ls
@@ -143,7 +143,7 @@ class ISACTight(nn.Module):
     def __init__(self, kernels, d, Ls):
         super().__init__()
         
-        #[kernels, d, _, _, _, _, kernel_size, Ls] = audfilters(kernel_size=kernel_size, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, bwmul=bwmul, scale=scale)
+        #[kernels, d, _, _, _, _, kernel_size, Ls] = audfilters(kernel_size=kernel_size, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, bw_multiplier=bw_multiplier, scale=scale)
         #self.kernels = kernels
         self.stride = d
         self.kernel_size = kernels.shape[-1]

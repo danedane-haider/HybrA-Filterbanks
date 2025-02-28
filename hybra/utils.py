@@ -253,7 +253,7 @@ def audspace(fmin:Union[float,int,torch.Tensor], fmax:Union[float,int,torch.Tens
 
     # Convert [fmin, fmax] to auditory scale
     if scale == "log10":
-        fmin = torch.maximum(torch.ones(fmin),torch.ones(1))
+        fmin = torch.maximum(torch.tensor(fmin), torch.ones(1) * 5)
     audlimits = freqtoaud(torch.tensor([fmin, fmax]), scale)
 
     # Generate frequencies spaced evenly on the auditory scale
@@ -340,17 +340,11 @@ def audspace_mod(fc_low:Union[float,int,torch.Tensor], fc_high:Union[float,int,t
         raise ValueError("fc_low must be less than fc_high.")
     elif fc_low == fc_high:
         # equidistant samples form 0 to fs/2
-        if scale == "log10":
-            fc = torch.linspace(1, fs//2, num_channels)
-        else:
-            fc = torch.linspace(0, fs//2, num_channels)
+        fc = torch.linspace(0, fs//2, num_channels)
         return fc, freqtoaud_mod(fc, fs//2, fs//2, scale)
     elif fc_low < fc_high:
         # Convert [0, fs//2] to modified auditory scale
-        if scale == "log10":
-            aud_min = freqtoaud_mod(torch.tensor([1]), fc_low, fc_high, scale)[0]
-        else:
-            aud_min = freqtoaud_mod(torch.tensor([0]), fc_low, fc_high, scale)[0]
+        aud_min = freqtoaud_mod(torch.tensor([0]), fc_low, fc_high, scale)[0]
         aud_max = freqtoaud_mod(torch.tensor([fs//2]), fc_low, fc_high, scale)[0]
 
         # Generate frequencies spaced evenly on the modified auditory scale
@@ -483,7 +477,7 @@ def modulate(g:torch.Tensor, fc:Union[float,int,torch.Tensor], fs:int):
 ####################################################################################################
 
 
-def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Union[float,int,None]=None, fs:int=16000, L:int=16000, bwmul:float=1, scale:str='erb') -> tuple[torch.Tensor, int, int, Union[int,float], Union[int,float], int, int, int]:
+def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Union[float,int,None]=None, fs:int=16000, L:int=16000, bw_multiplier:float=1, scale:str='erb') -> tuple[torch.Tensor, int, int, Union[int,float], Union[int,float], int, int, int]:
     """
     Generate FIR filter kernels with length *kernel_size* equidistantly spaced on auditory frequency scales.
     
@@ -493,7 +487,7 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
         fc_max (int): Maximum frequency (in Hz) that should lie on the aud scale.
         fs (int): Sampling rate.
         L (int): Signal length.
-        bwmul (float): Bandwidth multiplier.
+        bw_multiplier (float): Bandwidth multiplier.
         scale (str): Auditory scale.
     
     Returns:
@@ -517,19 +511,19 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
     g_probe = firwin(probeLg, probeLs)
     
     # peak normalize
-    gf_probe = torch.fft.fft(g_probe) / torch.max(torch.abs(torch.fft.fft(g_probe)))
+    gf_probe = torch.real(torch.fft.fft(g_probe) / torch.max(torch.abs(torch.fft.fft(g_probe))))
 
-    # compute ERB-type bandwidth of the prototype
+    # preset bandwidth factors to get a good condition number
     if scale == 'erb':
         bw_factor = 1.25 
     elif scale == 'mel':
-        bw_factor = 17.5
+        bw_factor = 17.5 * 0.923
     elif scale == 'log10':
-        bw_factor = 0.4
+        bw_factor = 0.75
     elif scale == 'bark':
-        bw_factor = 1
+        bw_factor = 1.0
     
-    bw_conversion = torch.norm(gf_probe)**2 * probeLg / probeLs / bw_factor
+    bw_conversion = torch.norm(gf_probe)**2 * probeLg / probeLs / bw_factor / bw_multiplier
     
     
     ####################################################################################################
@@ -538,9 +532,8 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
 
     # default values
     if kernel_size is None:
-        fc_full = audspace(0, fs//2, num_channels, scale)
-        fsupp_min = fctobw(fc_full[1], scale) / bw_conversion
-        kernel_size = int(torch.round(bw_conversion / fsupp_min * fs))
+        fsupp_min = fctobw(0, scale) / bw_conversion
+        kernel_size = int(torch.maximum(torch.round(bw_conversion / fsupp_min * fs),torch.tensor(L)))
     
     if fc_max is None:
         fc_max = fs // 2
@@ -582,8 +575,8 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
 
     # Decimation factor (stride) to get a nice frame and according signal length (lcm of d and Ls)
     # d = torch.floor(torch.min(fs / fsupp))
-    d = torch.tensor(kernel_min // 4)
-    Ls = int(torch.ceil(torch.tensor(L / d)) * d)
+    d = torch.maximum(torch.tensor(kernel_min // 4),torch.tensor(1))
+    Ls = int(torch.ceil(L / d) * d)
 
     ####################################################################################################
     # Generate filters
@@ -633,7 +626,9 @@ def plot_response(g, fs, scale='erb', plot_scale=False, fc_min=None, fc_max=None
 
     g_hat = response(g, fs)
     g_hat_pos = g_hat[:num_channels,:]
+    g_hat_pos[np.isnan(g_hat_pos)] = 0
     psd = np.sum(g_hat, axis=0)
+    psd[np.isnan(psd)] = 0
 
     if plot_scale:
         plt.figure(figsize=(8, 2))
