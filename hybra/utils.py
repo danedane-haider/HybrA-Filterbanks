@@ -253,7 +253,7 @@ def audspace(fmin:Union[float,int,torch.Tensor], fmax:Union[float,int,torch.Tens
 
     # Convert [fmin, fmax] to auditory scale
     if scale == "log10":
-        fmin = torch.maximum(torch.tensor(fmin), torch.ones(1) * 5)
+        fmin = torch.maximum(torch.tensor(fmin), torch.ones(1) * 1)
     audlimits = freqtoaud(torch.tensor([fmin, fmax]), scale)
 
     # Generate frequencies spaced evenly on the auditory scale
@@ -386,7 +386,7 @@ def fctobw(fc:Union[float,int,torch.Tensor], scale="erb"):
     if scale == "erb":
         bw = 24.7 + fc / 9.265
     elif scale == "bark":
-        bw = 25 + 75 * (1 + 1.4e-6 * fc**2)**0.69
+        bw = 25 + 75 * (1 + 1.4e-6 * fc ** 2) ** 0.69
     elif scale == "mel":
         bw = torch.log10(torch.tensor(17 / 7)) * (700 + fc) / 1000
     elif scale in ["log10"]:
@@ -512,38 +512,47 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
     
     # peak normalize
     gf_probe = torch.real(torch.fft.fft(g_probe) / torch.max(torch.abs(torch.fft.fft(g_probe))))
+    bw_probe = torch.norm(gf_probe)**2 * probeLg / probeLs / 2
 
     # preset bandwidth factors to get a good condition number
     if scale == 'erb':
-        bw_factor = 1.25 
+        bw_factor = 0.608
     elif scale == 'mel':
-        bw_factor = 17.5 * 0.923
+        bw_factor = 111.33
     elif scale == 'log10':
-        bw_factor = 0.75
+        bw_factor = 0.2
     elif scale == 'bark':
         bw_factor = 1.0
     
-    bw_conversion = torch.norm(gf_probe)**2 * probeLg / probeLs / bw_factor / bw_multiplier
+    bw_conversion = bw_probe / bw_factor / bw_multiplier * num_channels / 40
     
     
     ####################################################################################################
     # Center frequencies
     ####################################################################################################
 
-    # default values
-    if kernel_size is None:
-        fsupp_min = fctobw(0, scale) / bw_conversion
-        kernel_size = int(torch.maximum(torch.round(bw_conversion / fsupp_min * fs),torch.tensor(L)))
+    # checking the maximum kernel size
+    fsupp_min = fctobw(0, scale)
+    kernel_max = int(torch.minimum(torch.round(bw_conversion / fsupp_min * fs),torch.tensor(L)))
     
+    if kernel_size is None:
+        kernel_size = kernel_max
+
+    if kernel_size > kernel_max:
+        bw_factor = bw_probe / kernel_size / fsupp_min * fs
+        bw_conversion = bw_probe / bw_factor / bw_multiplier * num_channels / 40
+        fsupp_min = fctobw(0, scale)
+        kernel_max = int(torch.minimum(torch.round(bw_conversion / fsupp_min * fs),torch.tensor(L)))
+
     if fc_max is None:
         fc_max = fs // 2
 
     # get the bandwidth for the maximum kernel size and the associated center frequency
     fsupp_low = bw_conversion / kernel_size * fs
-    fc_min = bwtofc(fsupp_low * bw_conversion, scale)
+    fc_min = bwtofc(fsupp_low, scale)
 
     # get the bandwidth for the maximum center frequency and the associated kernel size
-    fsupp_high = fctobw(fc_max, scale) / bw_conversion
+    fsupp_high = fctobw(fc_max, scale)
     kernel_min = int(torch.round(bw_conversion / fsupp_high * fs))
 
     if fc_min >= fc_max:
@@ -566,10 +575,10 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
     tsupp_low = (torch.ones(num_low) * kernel_size).int()
     tsupp_high = torch.ones(num_high) * kernel_min
     if num_low + num_high == num_channels:
-        fsupp = fctobw(fc_max, scale) / bw_conversion
+        fsupp = fctobw(fc_max, scale)
         tsupp = tsupp_low
     else:
-        fsupp = fctobw(fc[num_low:num_low+num_aud], scale) / bw_conversion
+        fsupp = fctobw(fc[num_low:num_low+num_aud], scale)
         tsupp_aud = torch.round(bw_conversion / fsupp * fs)
         tsupp = torch.concatenate([tsupp_low, tsupp_aud, tsupp_high]).int()
 
