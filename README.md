@@ -1,11 +1,16 @@
 ![Logo](https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/HybrA.png)
 
 ## About
-This repository contains the official implementaions of [Hybrid Auditory filterbanks](https://arxiv.org/abs/2408.17358) and [ISAC](https://arxiv.org/abs/2408.17358). The modules are designed to be easily usable in the design of PyTorch model designs.
+This repository contains the official implementaions of [Hybrid Auditory filterbanks](https://arxiv.org/abs/2408.17358) and [ISAC](https://arxiv.org/abs/). The modules are designed to be easily usable in the design of PyTorch model designs.
 
 ## Installation
+We publish all releases on PyPi. You can install the current version by running:
+```
+pip install hybra
+```
 
 ## Usage
+This package offers several PyTorch modules to be used in your code performing transformations of an input signal into a time frequency representation.
 
 ## Citation
 
