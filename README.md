@@ -11,6 +11,23 @@ pip install hybra
 
 ## Usage
 This package offers several PyTorch modules to be used in your code performing transformations of an input signal into a time frequency representation.
+```python
+from hybra import HybrA
+
+import soundfile
+import torch
+
+device = "mps"
+
+x, fs = soundfile.read("./audio/crush.wav")
+x = 2 * torch.tensor(x[:, 0], dtype=torch.float32).unsqueeze(0)
+sig_len = x.shape[-1]
+
+filterbank = HybrA(L=sig_len,stride=8,scale='mel').to(device)
+filterbank.plot_response()
+
+out = filterbank(x.to(device))
+```
 
 ## Citation
 
