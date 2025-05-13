@@ -100,9 +100,9 @@ def alias(w:torch.Tensor, d:int, Ls:Union[int,None]=None, diag_only:bool=False) 
     """
     G = frequency_correlation(w=w, d=d, Ls=Ls, diag_only=diag_only)
     if diag_only:
-        return torch.max(G).div(torch.min(G))
+        return torch.max(G).div(torch.min(G)) - 1
     else:
-        return torch.max(torch.real(G[0,:])).div(torch.min(torch.real(G[0,:]))) + torch.sum(torch.max(G[1::,:].abs(), dim=-1)[0])
+        return torch.max(torch.real(G[0,:])).div(torch.min(torch.real(G[0,:]))) - 1 + torch.sum(torch.max(G[1::,:].abs(), dim=-1)[0])
 
 def can_tight(w:torch.Tensor, d:int, Ls:int) -> torch.Tensor:
     """
@@ -389,7 +389,7 @@ def fctobw(fc:Union[float,int,torch.Tensor], scale="erb"):
         bw = 25 + 75 * (1 + 1.4e-6 * fc ** 2) ** 0.69
     elif scale == "mel":
         bw = torch.log10(torch.tensor(17 / 7)) * (700 + fc) / 1000
-    elif scale in ["log10"]:
+    elif scale == "log10":
         bw = fc
     else:
         raise ValueError(f"Unsupported auditory scale: {scale}")
@@ -710,26 +710,50 @@ def plot_response(g, fs, scale='erb', plot_scale=False, fc_min=None, fc_max=None
     plt.tight_layout()
     plt.show()
 
-def plot_coefficients(coefficients, fc, L, fs):
-    """Plot the ISAC coefficients.
+def ISACgram(coefficients, fc, L, fs, fc_max=None, log_scale=False, vmin=None, cmap='inferno'):
+    """Plot the ISAC coefficients with optional log scaling and colorbar.
 
     Args:
-        coefficients (numpy.Array): Filterbank coefficients.
+        coefficients (numpy.Array or torch.Tensor): Filterbank coefficients.
         fc (numpy.Array): Center frequencies.
         L (int): Signal length.
         fs (int): Sampling rate.
+        fc_max (float or None): Max frequency to display.
+        log_scale (bool): Apply log scaling to coefficients.
+        vmin (float or None): Minimum value for dynamic range clipping.
+        cmap (str): Matplotlib colormap name.
     """
     fig, ax = plt.subplots()
-    ax.pcolor(coefficients.cpu().numpy())#, origin='lower', aspect='auto')
 
-    locs, labels = plt.yticks()
-    ax.set_yticks(locs[1:-1], [int(np.round(y, 0)) for y in fc[[int(x) for x in locs[1:-1]]]])
+    c = coefficients[0].detach().cpu().numpy()
+    if log_scale:
+        c = 20 * np.log10(np.abs(c)**2 + 1e-10)  # add epsilon to avoid log(0)
+    else:
+        c = np.abs(c)
 
-    locs, labels = plt.yticks()
-    ax.set_xticks(np.linspace(0, coefficients.shape[-1], len(locs)-2))
-    ax.set_xticklabels([np.round(x, 1) for x in np.linspace(0, L/fs, len(locs)-2)])
+    if fc_max is not None:
+        c = c[:np.argmax(fc > fc_max), :]
 
-    ax.set_title('Filterbank coefficients')
+    if vmin is not None:
+        mesh = ax.pcolor(c, cmap=cmap, vmin=np.min(c)*vmin)
+    else:
+        mesh = ax.pcolor(c, cmap=cmap)
+
+    # Add colorbar
+    fig.colorbar(mesh, ax=ax)
+
+    # Y-axis: frequencies
+    locs = np.linspace(0, c.shape[0]-1, min(len(fc), 10)).astype(int)
+    ax.set_yticks(locs)
+    ax.set_yticklabels([int(np.round(fc[i])) for i in locs])
+
+    # X-axis: time
+    num_time_labels = 10
+    xticks = np.linspace(0, c.shape[1]-1, num_time_labels)
+    ax.set_xticks(xticks)
+    ax.set_xticklabels([np.round(x, 1) for x in np.linspace(0, L/fs, num_time_labels)])
+
+    ax.set_title('Filterbank Coefficients')
     ax.set_ylabel('Frequency [Hz]')
     ax.set_xlabel('Time [s]')
     plt.tight_layout()
