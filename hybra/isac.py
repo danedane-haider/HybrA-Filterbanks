@@ -17,7 +17,7 @@ class ISAC(nn.Module):
                  stride:int=None,
                  fs:int=16000, 
                  L:int=16000,
-                 bw_multiplier:float=1,
+                 supp_mult:float=1,
                  scale:str='erb',
                  tighten=False,
                  is_encoder_learnable=False,
@@ -26,7 +26,7 @@ class ISAC(nn.Module):
         super().__init__()
 
         [kernels, d, fc, fc_min, fc_max, kernel_min, kernel_size, Ls] = audfilters(
-            kernel_size=kernel_size, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, bw_multiplier=bw_multiplier, scale=scale
+            kernel_size=kernel_size, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, supp_mult=supp_mult, scale=scale
         )
 
         print(f"Max kernel size: {kernel_size}")

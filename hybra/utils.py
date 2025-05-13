@@ -477,7 +477,7 @@ def modulate(g:torch.Tensor, fc:Union[float,int,torch.Tensor], fs:int):
 ####################################################################################################
 
 
-def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Union[float,int,None]=None, fs:int=16000, L:int=16000, bw_multiplier:float=1, scale:str='erb') -> tuple[torch.Tensor, int, int, Union[int,float], Union[int,float], int, int, int]:
+def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Union[float,int,None]=None, fs:int=16000, L:int=16000, supp_mult:float=None, scale:str='erb') -> tuple[torch.Tensor, int, int, Union[int,float], Union[int,float], int, int, int]:
     """
     Generate FIR filter kernels with length *kernel_size* equidistantly spaced on auditory frequency scales.
     
@@ -524,7 +524,7 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
     elif scale == 'bark':
         bw_factor = 1.0
     
-    bw_conversion = bw_probe / bw_factor / bw_multiplier * num_channels / 40
+    bw_conversion = bw_probe / bw_factor * num_channels / 40
     
     
     ####################################################################################################
@@ -540,7 +540,7 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
 
     if kernel_size > kernel_max:
         bw_factor = bw_probe / kernel_size / fsupp_min * fs
-        bw_conversion = bw_probe / bw_factor / bw_multiplier * num_channels / 40
+        bw_conversion = bw_probe / bw_factor * num_channels / 40
         fsupp_min = fctobw(0, scale)
         kernel_max = int(torch.minimum(torch.round(bw_conversion / fsupp_min * fs),torch.tensor(L)))
 
@@ -581,6 +581,16 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
         fsupp = fctobw(fc[num_low:num_low+num_aud], scale)
         tsupp_aud = torch.round(bw_conversion / fsupp * fs)
         tsupp = torch.concatenate([tsupp_low, tsupp_aud, tsupp_high]).int()
+    
+    if supp_mult is not None:
+        if supp_mult < 1:
+            tsupp = torch.max(torch.round(tsupp * supp_mult), torch.ones_like(tsupp)*8).int()
+            kernel_min = tsupp.min()
+            kernel_size = tsupp.max()
+        else:
+            tsupp = torch.min(torch.round(tsupp * supp_mult), torch.ones_like(tsupp)*L).int()
+            kernel_min = tsupp.min()
+            kernel_size = tsupp.max()
 
     # Decimation factor (stride) to get a nice frame and according signal length (lcm of d and Ls)
     # d = torch.floor(torch.min(fs / fsupp))
