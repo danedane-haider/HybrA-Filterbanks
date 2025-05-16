@@ -155,5 +155,6 @@ bw.py
 audio/
 
 plot_spec.py
+scale_plots.py
 
 *.txt
