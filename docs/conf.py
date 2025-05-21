@@ -10,11 +10,15 @@ sys.path.insert(0, str(Path.cwd().parent))
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
+import datetime
+import tomli
+with open("../pyproject.toml", "rb") as f:
+    toml = tomli.load(f)
 
 project = 'HybrA-Filterbanks'
-copyright = '2025, Daniel Haider, Felix Perfler'
+copyright = f'{datetime.date.today().year}, Daniel Haider, Felix Perfler'
 author = 'Daniel Haider, Felix Perfler'
-release = '2025.06'
+release = toml['project']['version']
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

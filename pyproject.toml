@@ -22,11 +22,11 @@ Repository = "https://github.com/danedane-haider/Hybrid-Auditory-Filterbanks.git
 
 [dependency-groups]
 dev = [
-    "ipykernel>=6.29.5",
     "soundfile",
     "torchaudio"
 ]
 doc = [
-  "sphinx"
+  "sphinx",
+  "tomli"
 ]
 
