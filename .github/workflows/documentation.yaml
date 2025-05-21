@@ -1,0 +1,36 @@
+name: documentation
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: write
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+      - name: Install uv
+        run: pipx install uv
+      - name: Install dependencies
+        run: |
+          uv sync
+      - name: Install sphinx
+        run: |
+          uv pip install sphinx
+      - name: Activate env
+        run: source .venv/bin/activate
+      - name: Switch directory
+        run: cd docs/
+      - name: Sphinx build
+        run: |
+          make html
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        with:
+          publish_branch: gh-pages
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: _build/
+          force_orphan: true
