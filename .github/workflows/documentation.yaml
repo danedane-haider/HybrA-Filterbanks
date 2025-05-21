@@ -21,11 +21,8 @@ jobs:
           uv pip install sphinx
       - name: Activate env
         run: source .venv/bin/activate
-      - name: Switch directory
-        run: cd docs/
       - name: Sphinx build
-        run: |
-          make html
+        run: cd docs/ && make html
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
