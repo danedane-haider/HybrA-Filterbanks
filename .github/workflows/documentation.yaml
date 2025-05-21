@@ -30,7 +30,7 @@ jobs:
       - name: Deploy to GitHub Pages
         run: |
           git checkout gh-pages && \
-          for dirname in html/*; do mv "html/$dirname" "$dirname" && git add "$dirname"; done && \
+          git add html/* && \
           git commit -m "Added HTML docs" && \
           git push origin gh-pages && \
           touch html/.nojekyll && cp assets/gh-pages-redirect.html html/index.html & \\
