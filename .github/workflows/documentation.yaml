@@ -29,6 +29,8 @@ jobs:
           sphinx-multiversion docs/ html/
       - name: Deploy to GitHub Pages
         run: |
+          git config --global user.name "GitHub Actions Bot" && \
+          git config --global user.email "github-actions-bot@users.noreply.github.com" && \
           git checkout gh-pages && \
           git add html/* && \
           git commit -m "Added HTML docs" && \
