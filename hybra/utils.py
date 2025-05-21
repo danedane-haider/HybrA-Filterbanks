@@ -100,9 +100,9 @@ def alias(w:torch.Tensor, d:int, Ls:Union[int,None]=None, diag_only:bool=False) 
     """
     G = frequency_correlation(w=w, d=d, Ls=Ls, diag_only=diag_only)
     if diag_only:
-        return torch.max(G).div(torch.min(G))
+        return torch.max(G).div(torch.min(G)) - 1
     else:
-        return torch.max(torch.real(G[0,:])).div(torch.min(torch.real(G[0,:]))) + torch.sum(torch.max(G[1::,:].abs(), dim=-1)[0])
+        return torch.max(torch.real(G[0,:])).div(torch.min(torch.real(G[0,:]))) - 1 + torch.sum(torch.max(G[1::,:].abs(), dim=-1)[0])
 
 def can_tight(w:torch.Tensor, d:int, Ls:int) -> torch.Tensor:
     """
@@ -163,7 +163,7 @@ def fir_tightener3000(w:torch.Tensor, supp:int, d:int, eps:float=1.01, Ls:Union[
 ################### Routines for constructing auditory filterbanks #################################
 ####################################################################################################
 
-def freqtoaud(freq:Union[float,int,torch.Tensor], scale:str="erb"):
+def freqtoaud(freq:Union[float,int,torch.Tensor], scale:str="erb", fs:int=None):
     """
     Converts frequencies (Hz) to auditory scale units.
 
@@ -198,11 +198,21 @@ def freqtoaud(freq:Union[float,int,torch.Tensor], scale:str="erb"):
     elif scale == "log10":
         # Logarithmic scale
         return torch.log10(torch.maximum(torch.ones(1),freq))
+    
+    elif scale == "elelog":
+        if fs is None:
+            raise ValueError("Sampling frequency fs must be provided for 'elelog' scale.")
+        fmin = 1
+        fmax = fs//2
+        k = 0.88
+        A = fmin/(1-k)
+        alpha = np.log10(fmax/A + k)
+        return np.log((freq / A + k) / alpha) #- np.log((fmin / A + k) / alpha)
 
     else:
-        raise ValueError(f"Unsupported scale: '{scale}'. Available options are: 'mel', 'erb', 'bark', 'log10'.")
+        raise ValueError(f"Unsupported scale: '{scale}'. Available options are: 'mel', 'erb', 'bark', 'log10', 'elelog'.")
 
-def audtofreq(aud:Union[float,int,torch.Tensor], scale:str="erb"):
+def audtofreq(aud:Union[float,int,torch.Tensor], scale:str="erb", fs:int=None):
     """
     Converts auditory units to frequency (Hz).
     Parameters:
@@ -226,9 +236,19 @@ def audtofreq(aud:Union[float,int,torch.Tensor], scale:str="erb"):
     
     elif scale == "log10":
         return 10 ** aud
+    
+    elif scale == "elelog":
+        if fs is None:
+            raise ValueError("Sampling frequency fs must be provided for 'elelog' scale.")
+        fmin = 1
+        fmax = fs//2
+        k = 0.88
+        A = fmin/(1-k)
+        alpha = np.log10(fmax/A + k)
+        return A * (np.exp(aud) * alpha - k)
 
     else:
-        raise ValueError(f"Unsupported scale: '{scale}'. Available options are: 'mel', 'erb', 'bark', 'log10'.")
+        raise ValueError(f"Unsupported scale: '{scale}'. Available options are: 'mel', 'erb', 'bark', 'log10', 'elelog'.")
 
 
 def audspace(fmin:Union[float,int,torch.Tensor], fmax:Union[float,int,torch.Tensor], num_channels:int, scale:str="erb"):
@@ -252,8 +272,8 @@ def audspace(fmin:Union[float,int,torch.Tensor], fmax:Union[float,int,torch.Tens
         raise ValueError("fmin must be less than or equal to fmax.")
 
     # Convert [fmin, fmax] to auditory scale
-    if scale == "log10":
-        fmin = torch.maximum(torch.tensor(fmin), torch.ones(1) * 1)
+    if scale == "log10" or scale == "elelog":
+        fmin = torch.maximum(torch.tensor(fmin), torch.ones(1))
     audlimits = freqtoaud(torch.tensor([fmin, fmax]), scale)
 
     # Generate frequencies spaced evenly on the auditory scale
@@ -266,7 +286,7 @@ def audspace(fmin:Union[float,int,torch.Tensor], fmax:Union[float,int,torch.Tens
 
     return y
 
-def freqtoaud_mod(freq:Union[float,int,torch.Tensor], fc_low:Union[float,int,torch.Tensor], fc_high:Union[float,int,torch.Tensor], scale="erb"):
+def freqtoaud_mod(freq:Union[float,int,torch.Tensor], fc_low:Union[float,int,torch.Tensor], fc_high:Union[float,int,torch.Tensor], scale="erb", fs=None):
     """
     Modified auditory scale function with linear region below fc_crit.
     
@@ -278,10 +298,10 @@ def freqtoaud_mod(freq:Union[float,int,torch.Tensor], fc_low:Union[float,int,tor
         ndarray:
             Values on the modified auditory scale.
     """
-    aud_crit_low = freqtoaud(fc_low, scale)
-    aud_crit_high = freqtoaud(fc_high, scale)
-    slope_low = (freqtoaud(fc_low * 1.01, scale) - aud_crit_low) / (fc_low * 0.01)
-    slope_high = (freqtoaud(fc_high * 1.01, scale) - aud_crit_high) / (fc_high * 0.01)
+    aud_crit_low = freqtoaud(fc_low, scale, fs)
+    aud_crit_high = freqtoaud(fc_high, scale, fs)
+    slope_low = (freqtoaud(fc_low * 1.01, scale, fs) - aud_crit_low) / (fc_low * 0.01)
+    slope_high = (freqtoaud(fc_high * 1.01, scale, fs) - aud_crit_high) / (fc_high * 0.01)
 
     linear_low = freq < fc_low
     linear_high = freq > fc_high
@@ -290,12 +310,12 @@ def freqtoaud_mod(freq:Union[float,int,torch.Tensor], fc_low:Union[float,int,tor
     aud = torch.zeros_like(freq, dtype=torch.float32)
 
     aud[linear_low] = slope_low * (freq[linear_low] - fc_low) + aud_crit_low
-    aud[auditory] = freqtoaud(freq[auditory], scale)
+    aud[auditory] = freqtoaud(freq[auditory], scale, fs)
     aud[linear_high] = slope_high * (freq[linear_high] - fc_high) + aud_crit_high
 
     return aud
 
-def audtofreq_mod(aud:Union[float,int,torch.Tensor], fc_low:Union[float,int,torch.Tensor], fc_high:Union[float,int,torch.Tensor], scale="erb"):
+def audtofreq_mod(aud:Union[float,int,torch.Tensor], fc_low:Union[float,int,torch.Tensor], fc_high:Union[float,int,torch.Tensor], scale="erb", fs = None):
     """
     Inverse of freqtoaud_mod to map auditory scale back to frequency.
     
@@ -307,10 +327,10 @@ def audtofreq_mod(aud:Union[float,int,torch.Tensor], fc_low:Union[float,int,torc
         ndarray:
             Frequency values in Hz
     """
-    aud_crit_low = freqtoaud(fc_low, scale)
-    aud_crit_high = freqtoaud(fc_high, scale)
-    slope_low = (freqtoaud(fc_low * 1.01, scale) - aud_crit_low) / (fc_low * 0.01)
-    slope_high = (freqtoaud(fc_high * 1.01, scale) - aud_crit_high) / (fc_high * 0.01)
+    aud_crit_low = freqtoaud(fc_low, scale, fs)
+    aud_crit_high = freqtoaud(fc_high, scale, fs)
+    slope_low = (freqtoaud(fc_low * 1.01, scale, fs) - aud_crit_low) / (fc_low * 0.01)
+    slope_high = (freqtoaud(fc_high * 1.01, scale, fs) - aud_crit_high) / (fc_high * 0.01)
 
     linear_low = aud < aud_crit_low
     linear_high = aud > aud_crit_high
@@ -319,7 +339,7 @@ def audtofreq_mod(aud:Union[float,int,torch.Tensor], fc_low:Union[float,int,torc
     freq = torch.zeros_like(aud, dtype=torch.float32)
 
     freq[linear_low] = (aud[linear_low] - aud_crit_low) / slope_low + fc_low
-    freq[auditory_part] = audtofreq(aud[auditory_part], scale)
+    freq[auditory_part] = audtofreq(aud[auditory_part], scale, fs)
     freq[linear_high] = (aud[linear_high] - aud_crit_high) / slope_high + fc_high
 
     return freq
@@ -341,17 +361,17 @@ def audspace_mod(fc_low:Union[float,int,torch.Tensor], fc_high:Union[float,int,t
     elif fc_low == fc_high:
         # equidistant samples form 0 to fs/2
         fc = torch.linspace(0, fs//2, num_channels)
-        return fc, freqtoaud_mod(fc, fs//2, fs//2, scale)
+        return fc, freqtoaud_mod(fc, fs//2, fs//2, scale, fs)
     elif fc_low < fc_high:
         # Convert [0, fs//2] to modified auditory scale
-        aud_min = freqtoaud_mod(torch.tensor([0]), fc_low, fc_high, scale)[0]
-        aud_max = freqtoaud_mod(torch.tensor([fs//2]), fc_low, fc_high, scale)[0]
+        aud_min = freqtoaud_mod(torch.tensor([0]), fc_low, fc_high, scale, fs)[0]
+        aud_max = freqtoaud_mod(torch.tensor([fs//2]), fc_low, fc_high, scale, fs)[0]
 
         # Generate frequencies spaced evenly on the modified auditory scale
         fc_aud = torch.linspace(aud_min, aud_max, num_channels)
 
         # Convert back to frequency scale
-        fc = audtofreq_mod(fc_aud, fc_low, fc_high, scale)
+        fc = audtofreq_mod(fc_aud, fc_low, fc_high, scale, fs)
 
         # Ensure exact endpoints
         fc[0] = 0
@@ -389,7 +409,7 @@ def fctobw(fc:Union[float,int,torch.Tensor], scale="erb"):
         bw = 25 + 75 * (1 + 1.4e-6 * fc ** 2) ** 0.69
     elif scale == "mel":
         bw = torch.log10(torch.tensor(17 / 7)) * (700 + fc) / 1000
-    elif scale in ["log10"]:
+    elif scale == "log10":
         bw = fc
     else:
         raise ValueError(f"Unsupported auditory scale: {scale}")
@@ -477,7 +497,7 @@ def modulate(g:torch.Tensor, fc:Union[float,int,torch.Tensor], fs:int):
 ####################################################################################################
 
 
-def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Union[float,int,None]=None, fs:int=16000, L:int=16000, bw_multiplier:float=1, scale:str='erb') -> tuple[torch.Tensor, int, int, Union[int,float], Union[int,float], int, int, int]:
+def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Union[float,int,None]=None, fs:int=16000, L:int=16000, supp_mult:float=1, scale:str='mel') -> tuple[torch.Tensor, int, int, Union[int,float], Union[int,float], int, int, int]:
     """
     Generate FIR filter kernels with length *kernel_size* equidistantly spaced on auditory frequency scales.
     
@@ -523,8 +543,10 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
         bw_factor = 0.2
     elif scale == 'bark':
         bw_factor = 1.0
+    elif scale == 'elelog':
+        bw_factor = 1
     
-    bw_conversion = bw_probe / bw_factor / bw_multiplier * num_channels / 40
+    bw_conversion = bw_probe / bw_factor# * num_channels / 40
     
     
     ####################################################################################################
@@ -532,33 +554,41 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
     ####################################################################################################
 
     # checking the maximum kernel size
-    fsupp_min = fctobw(0, scale)
-    kernel_max = int(torch.minimum(torch.round(bw_conversion / fsupp_min * fs),torch.tensor(L)))
-    
-    if kernel_size is None:
+    if scale == 'elelog':
+        kernel_max = fs / 5 * 10 # capture frequencies of 5Hz for 10 cycles
         kernel_size = kernel_max
-
-    if kernel_size > kernel_max:
-        bw_factor = bw_probe / kernel_size / fsupp_min * fs
-        bw_conversion = bw_probe / bw_factor / bw_multiplier * num_channels / 40
+        fc_min = 0.1
+        if fc_max is None:
+            fc_max = fs // 2
+        kernel_min = int(fs / fc_max * 10)
+    else:
         fsupp_min = fctobw(0, scale)
         kernel_max = int(torch.minimum(torch.round(bw_conversion / fsupp_min * fs),torch.tensor(L)))
+    
+        if kernel_size is None:
+            kernel_size = kernel_max
 
-    if fc_max is None:
-        fc_max = fs // 2
+        if kernel_size > kernel_max:
+            bw_factor = bw_probe / kernel_size / fsupp_min * fs
+            bw_conversion = bw_probe / bw_factor# * num_channels / 40
+            fsupp_min = fctobw(0, scale)
+            kernel_max = int(torch.minimum(torch.round(bw_conversion / fsupp_min * fs),torch.tensor(L)))
 
-    # get the bandwidth for the maximum kernel size and the associated center frequency
-    fsupp_low = bw_conversion / kernel_size * fs
-    fc_min = bwtofc(fsupp_low, scale)
+        # get the bandwidth for the maximum kernel size and the associated center frequency
+        fsupp_low = bw_conversion / kernel_size * fs
+        fc_min = bwtofc(fsupp_low, scale)
 
-    # get the bandwidth for the maximum center frequency and the associated kernel size
-    fsupp_high = fctobw(fc_max, scale)
-    kernel_min = int(torch.round(bw_conversion / fsupp_high * fs))
+        if fc_max is None:
+            fc_max = fs // 2
 
-    if fc_min >= fc_max:
-        fc_max = fc_min
-        kernel_min = kernel_size
-        Warning(f"fc_max was increased to {fc_min} to enable the kernel size of {kernel_size}.")
+        # get the bandwidth for the maximum center frequency and the associated kernel size
+        fsupp_high = fctobw(fc_max, scale)
+        kernel_min = int(torch.round(bw_conversion / fsupp_high * fs))
+
+        if fc_min >= fc_max:
+            fc_max = fc_min
+            kernel_min = kernel_size
+            Warning(f"fc_max was increased to {fc_min} to enable the kernel size of {kernel_size}.")
 
     # get center frequencies
     [fc, _] = audspace_mod(fc_min, fc_max, fs, num_channels, scale)
@@ -574,17 +604,30 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
     # get time supports
     tsupp_low = (torch.ones(num_low) * kernel_size).int()
     tsupp_high = torch.ones(num_high) * kernel_min
-    if num_low + num_high == num_channels:
-        fsupp = fctobw(fc_max, scale)
-        tsupp = tsupp_low
-    else:
-        fsupp = fctobw(fc[num_low:num_low+num_aud], scale)
-        tsupp_aud = torch.round(bw_conversion / fsupp * fs)
+    if scale == 'elelog':
+        tsupp_aud = (torch.minimum(torch.tensor(kernel_max), torch.round(fs / fc[num_low:num_low+num_aud] * 10))).int()
         tsupp = torch.concatenate([tsupp_low, tsupp_aud, tsupp_high]).int()
+    else:
+        if num_low + num_high == num_channels:
+            fsupp = fctobw(fc_max, scale)
+            tsupp = tsupp_low
+        else:
+            fsupp = fctobw(fc[num_low:num_low+num_aud], scale)
+            tsupp_aud = torch.round(bw_conversion / fsupp * fs)
+            tsupp = torch.concatenate([tsupp_low, tsupp_aud, tsupp_high]).int()
+    
+    if supp_mult < 1:
+        tsupp = torch.max(torch.round(tsupp * supp_mult), torch.ones_like(tsupp)*8).int()
+        kernel_min = tsupp.min()
+        kernel_size = tsupp.max()
+    else:
+        tsupp = torch.min(torch.round(tsupp * supp_mult), torch.ones_like(tsupp)*L).int()
+        kernel_min = tsupp.min()
+        kernel_size = tsupp.max()
 
     # Decimation factor (stride) to get a nice frame and according signal length (lcm of d and Ls)
     # d = torch.floor(torch.min(fs / fsupp))
-    d = torch.maximum(torch.tensor(kernel_min // 4),torch.tensor(1))
+    d = torch.maximum(kernel_min // 4, torch.tensor(1))
     Ls = int(torch.ceil(L / d) * d)
 
     ####################################################################################################
@@ -644,9 +687,9 @@ def plot_response(g, fs, scale='erb', plot_scale=False, fc_min=None, fc_max=None
         freq_samples, _ = audspace_mod(fc_min, fc_max, fs, num_channels, scale)
         freqs = torch.linspace(0, fs//2, fs//2)
 
-        auds = freqtoaud_mod(freqs, fc_min, fc_max, scale).numpy()
+        auds = freqtoaud_mod(freqs, fc_min, fc_max, scale, fs).numpy()
 
-        plt.scatter(freq_samples.numpy(), freqtoaud_mod(freq_samples, fc_min, fc_max, scale).numpy(), color="black", label="Center frequencies", linewidths = 0.05)
+        plt.scatter(freq_samples.numpy(), freqtoaud_mod(freq_samples, fc_min, fc_max, scale, fs).numpy(), color="black", label="Center frequencies", linewidths = 0.05)
         plt.plot(freqs, auds, color='black')
 
         if fc_min is not None:
@@ -710,26 +753,50 @@ def plot_response(g, fs, scale='erb', plot_scale=False, fc_min=None, fc_max=None
     plt.tight_layout()
     plt.show()
 
-def plot_coefficients(coefficients, fc, L, fs):
-    """Plot the ISAC coefficients.
+def ISACgram(coefficients, fc, L, fs, fc_max=None, log_scale=False, vmin=None, cmap='inferno'):
+    """Plot the ISAC coefficients with optional log scaling and colorbar.
 
     Args:
-        coefficients (numpy.Array): Filterbank coefficients.
+        coefficients (numpy.Array or torch.Tensor): Filterbank coefficients.
         fc (numpy.Array): Center frequencies.
         L (int): Signal length.
         fs (int): Sampling rate.
+        fc_max (float or None): Max frequency to display.
+        log_scale (bool): Apply log scaling to coefficients.
+        vmin (float or None): Minimum value for dynamic range clipping.
+        cmap (str): Matplotlib colormap name.
     """
     fig, ax = plt.subplots()
-    ax.pcolor(coefficients.cpu().numpy())#, origin='lower', aspect='auto')
 
-    locs, labels = plt.yticks()
-    ax.set_yticks(locs[1:-1], [int(np.round(y, 0)) for y in fc[[int(x) for x in locs[1:-1]]]])
+    c = coefficients[0].detach().cpu().numpy()
+    if log_scale:
+        c = 20 * np.log10(np.abs(c)**2 + 1e-10)  # add epsilon to avoid log(0)
+    else:
+        c = np.abs(c)
 
-    locs, labels = plt.yticks()
-    ax.set_xticks(np.linspace(0, coefficients.shape[-1], len(locs)-2))
-    ax.set_xticklabels([np.round(x, 1) for x in np.linspace(0, L/fs, len(locs)-2)])
+    if fc_max is not None:
+        c = c[:np.argmax(fc > fc_max), :]
 
-    ax.set_title('Filterbank coefficients')
+    if vmin is not None:
+        mesh = ax.pcolor(c, cmap=cmap, vmin=np.min(c)*vmin)
+    else:
+        mesh = ax.pcolor(c, cmap=cmap)
+
+    # Add colorbar
+    fig.colorbar(mesh, ax=ax)
+
+    # Y-axis: frequencies
+    locs = np.linspace(0, c.shape[0]-1, min(len(fc), 10)).astype(int)
+    ax.set_yticks(locs)
+    ax.set_yticklabels([int(np.round(fc[i])) for i in locs])
+
+    # X-axis: time
+    num_time_labels = 10
+    xticks = np.linspace(0, c.shape[1]-1, num_time_labels)
+    ax.set_xticks(xticks)
+    ax.set_xticklabels([np.round(x, 1) for x in np.linspace(0, L/fs, num_time_labels)])
+
+    ax.set_title('Filterbank Coefficients')
     ax.set_ylabel('Frequency [Hz]')
     ax.set_xlabel('Time [s]')
     plt.tight_layout()
