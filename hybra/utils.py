@@ -213,18 +213,6 @@ def freqtoaud(freq:Union[float,int,torch.Tensor], scale:str="erb", fs:int=None):
         raise ValueError(f"Unsupported scale: '{scale}'. Available options are: 'mel', 'erb', 'bark', 'log10', 'elelog'.")
 
 def audtofreq(aud:Union[float,int,torch.Tensor], scale:str="erb", fs:int=None):
-    """
-    Converts auditory units to frequency (Hz).
-    Parameters:
-        aud (float or numpy array): Auditory scale value(s) to convert.
-        scale (str): Auditory scale. Supported values are:
-                    - 'erb' (default)
-                    - 'mel'
-                    - 'bark'
-                    - 'log10'
-    Returns:
-        float or numpy array: Frequency value(s) in Hz.
-    """
     if scale == "erb":
         return (1 / 0.00437) * (torch.exp(aud / 9.2645) - 1)
 

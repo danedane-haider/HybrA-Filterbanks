@@ -1,24 +1,10 @@
-# Configuration file for the Sphinx documentation builder.
-#
-# For the full list of built-in configuration values, see the documentation:
-# https://www.sphinx-doc.org/en/master/usage/configuration.html
-
-from pathlib import Path
-import sys
-
-sys.path.insert(0, str(Path.cwd().parent))
-
-# -- Project information -----------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
-import datetime
-import tomli
-with open("../pyproject.toml", "rb") as f:
-    toml = tomli.load(f)
+import time
 
 project = 'HybrA-Filterbanks'
-copyright = f'{datetime.date.today().year}, Daniel Haider, Felix Perfler'
 author = 'Daniel Haider, Felix Perfler'
-release = toml['project']['version']
+copyright = "{}, {}".format(time.strftime("%Y"), author)
+release = "2025.03"
+version = "2025"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -31,18 +17,22 @@ extensions = [
 ]
 
 templates_path = ['_templates']
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
-autodoc_default_options = {
-    'members': True,
-    'member-order': 'bysource',
-    'special-members': '__init__',
-    'undoc-members': True,
-    'exclude-members': '__weakref__'
+html_sidebars = {
+    "**": [
+        "about.html",
+        "navigation.html",
+        "relations.html",
+        "searchbox.html",
+        "versioning.html",
+    ],
 }
 
-# -- Options for HTML output -------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
+smv_remote_whitelist = r"^origin$"
+smv_branch_whitelist = r"^main$"
 
 html_theme = 'alabaster'
-html_static_path = ['_static']
+html_last_updated_fmt = "%c"
+master_doc = "index"
+pygments_style = "friendly"
+
