@@ -33,7 +33,7 @@ jobs:
           git config --global user.name "GitHub Actions Bot" && \
           git config --global user.email "github-actions-bot@users.noreply.github.com" && \
           git checkout gh-pages && \
-          for dirname in html/*; do mv "html/$dirname" "$dirname" && git add "$dirname"; done && \
+          for itempath in html/*; do mv "$itempath" . && git add "$(basename "$itempath")"; done && \
           git commit -m "Added HTML docs" && \
           git push origin gh-pages && \
           git checkout main
