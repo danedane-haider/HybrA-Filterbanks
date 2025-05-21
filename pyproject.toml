@@ -26,4 +26,7 @@ dev = [
     "soundfile",
     "torchaudio"
 ]
+doc = [
+  "sphinx"
+]
 
