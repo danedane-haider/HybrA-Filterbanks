@@ -30,13 +30,13 @@ jobs:
           git fetch --all && \
           sphinx-multiversion docs/ html/ && \
           cp docs/assets/index.html html/index.html && \
-          git config --global user.name "GitHub Actions Bot" && \
-          git config --global user.email "github-actions-bot@users.noreply.github.com" && \
-          git checkout gh-pages && \
-          for itempath in html/*; do mv "$itempath" . && git add "$(basename "$itempath")"; done && \
-          git commit -m "Added HTML docs" && \
-          git push origin gh-pages && \
-          git checkout main
+          # git config --global user.name "GitHub Actions Bot" && \
+          # git config --global user.email "github-actions-bot@users.noreply.github.com" && \
+          # git checkout gh-pages && \
+          # for itempath in html/*; do mv "$itempath" . && git add "$(basename "$itempath")"; done && \
+          # git commit -m "Added HTML docs" && \
+          # git push origin gh-pages && \
+          # git checkout main
       
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3
