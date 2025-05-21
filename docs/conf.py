@@ -1,10 +1,13 @@
 import time
+import tomli
+with open("../pyproject.toml", "rb") as f:
+    toml = tomli.load(f)
 
 project = 'HybrA-Filterbanks'
 author = 'Daniel Haider, Felix Perfler'
 copyright = "{}, {}".format(time.strftime("%Y"), author)
-release = "2025.03"
-version = "2025"
+release = toml['project']['version']
+version = toml['project']['version'].split('.')[0]
 
 extensions = [
     'sphinx.ext.autodoc',
