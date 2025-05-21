@@ -26,7 +26,8 @@ release = toml['project']['version']
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
-    'sphinx.ext.mathjax'
+    'sphinx.ext.mathjax',
+    'sphinx_multiversion'
 ]
 
 templates_path = ['_templates']

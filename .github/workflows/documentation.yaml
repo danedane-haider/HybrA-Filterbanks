@@ -23,7 +23,7 @@ jobs:
           uv sync && \
           uv pip install --group doc && \
           source .venv/bin/activate && \
-          cd docs/ && make html
+          sphinx-multiversion docs/ docs/_build/html
       - name: Deploy to GitHub Pages
         run: touch docs/_build/html/.nojekyll
       
