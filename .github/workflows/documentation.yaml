@@ -3,7 +3,7 @@ name: documentation
 on: [push, pull_request, workflow_dispatch]
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
