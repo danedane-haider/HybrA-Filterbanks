@@ -6,9 +6,6 @@ copyright = "{}, {}".format(time.strftime("%Y"), author)
 release = "2025.03"
 version = "2025"
 
-# -- General configuration ---------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
-
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
