@@ -27,6 +27,7 @@ dev = [
 ]
 doc = [
   "sphinx",
-  "tomli"
+  "tomli",
+  "sphinx-multiversion"
 ]
 
