@@ -4,7 +4,7 @@
 This repository contains the official implementaions of [Hybrid Auditory filterbanks](https://arxiv.org/abs/2408.17358) and [ISAC](https://arxiv.org/abs/2505.07709). The modules are designed to be easily usable in the design of PyTorch model designs.
 
 ## Documentation
-https://github.com/danedane-haider/HybrA-Filterbanks
+[https://github.com/danedane-haider/HybrA-Filterbanks](https://danedane-haider.github.io/HybrA-Filterbanks/main/)
 
 ## Installation
 We publish all releases on PyPi. You can install the current version by running:
