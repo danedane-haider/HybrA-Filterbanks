@@ -26,17 +26,10 @@ jobs:
           uv sync && \
           uv pip install --group doc && \
           source .venv/bin/activate && \
-          sphinx-multiversion docs/ html/
-      - name: Deploy to GitHub Pages
-        run: |
-          git config --global user.name "GitHub Actions Bot" && \
-          git config --global user.email "github-actions-bot@users.noreply.github.com" && \
-          git checkout gh-pages && \
-          git add --all && \
-          git commit -m "Added HTML docs" && \
-          git push origin gh-pages && \
-          touch html/.nojekyll && \
-          cp index.html html/index.html & \\
+          mkdir html && \
+          git fetch --all && \
+          sphinx-multiversion docs/ html/ && \
+          cp assets/index.html html/index.html 
       
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3
