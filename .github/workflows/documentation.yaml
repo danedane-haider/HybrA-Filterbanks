@@ -25,71 +25,87 @@ jobs:
 
       - name: Build docs
         run: |
+          set -x # Enable command tracing for debugging
+
           # Setup Python environment and install dependencies
           uv sync
-          uv pip install --group doc # Ensure sphinx-multiversion is in this group
-          source .venv/bin/activate # Activate the virtual environment
+          uv pip install --group doc
+          source .venv/bin/activate
+
+          echo "Current working directory: $(pwd)"
+          echo "Checking for .git directory initially:"
+          ls -la .git || echo ".git directory not found at initial stage!"
 
           echo "Building documentation with sphinx-multiversion..."
-          # Clean any previous local build html dir and ensure output path is clear
           rm -rf "$GITHUB_WORKSPACE/html"
-          # Build documentation. Output will be in $GITHUB_WORKSPACE/html/
-          # Using an absolute path for sphinx-multiversion output for clarity
           sphinx-multiversion docs/ "$GITHUB_WORKSPACE/html/"
-          # Copy the main index file
           cp "$GITHUB_WORKSPACE/docs/assets/index.html" "$GITHUB_WORKSPACE/html/index.html"
 
           echo "Documentation built in $GITHUB_WORKSPACE/html/"
-          ls -lA "$GITHUB_WORKSPACE/html/" # List contents for verification
+          ls -lA "$GITHUB_WORKSPACE/html/"
 
-          # === Critical: Check if build output exists and is not empty ===
           if ! [ -d "$GITHUB_WORKSPACE/html" ] || ! [ "$(ls -A $GITHUB_WORKSPACE/html)" ]; then
             echo "Error: Build output directory $GITHUB_WORKSPACE/html is empty or does not exist after build."
             exit 1
           fi
 
           echo "Moving build artifacts to a temporary location..."
-          TEMP_BUILD_DIR=$(mktemp -d) # Create a temporary directory
-          # Move the entire 'html' directory into the temporary location
+          TEMP_BUILD_DIR=$(mktemp -d)
           mv "$GITHUB_WORKSPACE/html" "$TEMP_BUILD_DIR/build_output"
           echo "Build artifacts moved to $TEMP_BUILD_DIR/build_output"
-          ls -lA "$TEMP_BUILD_DIR/build_output" # Verify contents in new location
+          ls -lA "$TEMP_BUILD_DIR/build_output"
 
-          # Configure Git user for commit
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "github-actions-bot@users.noreply.github.com"
 
-          # Store current branch/ref to switch back later
           CURRENT_REF=$(git rev-parse --abbrev-ref HEAD)
-          if [ "$CURRENT_REF" = "HEAD" ]; then # If in detached HEAD state (e.g., on a tag)
-            CURRENT_REF=$(git rev-parse HEAD) # Get the full commit SHA
+          if [ "$CURRENT_REF" = "HEAD" ]; then
+            CURRENT_REF=$(git rev-parse HEAD)
           fi
           echo "Current reference is $CURRENT_REF"
+          echo "Current working directory before gh-pages checkout: $(pwd)"
+          echo "Checking for .git directory before gh-pages checkout:"
+          ls -la .git || echo ".git directory not found before gh-pages checkout!"
 
           echo "Switching to gh-pages branch..."
-          git fetch --all # Ensure all remote branches are available
+          git fetch --all
           if git rev-parse --verify origin/gh-pages > /dev/null 2>&1; then
-            git checkout gh-pages # This will set up tracking if not already
-            git pull origin gh-pages # Ensure it's up-to-date with remote
+            git checkout gh-pages
+            git pull origin gh-pages
           else
             echo "gh-pages branch does not exist on origin. Creating a new orphan branch."
             git checkout --orphan gh-pages
           fi
           
-          echo "Cleaning gh-pages branch working directory (current dir: $(pwd))..."
-          # Remove all existing TRÄCKED files in the gh-pages branch root.
-          # --ignore-unmatch prevents error if no files are matched (e.g., new orphan branch)
-          git rm -rf --ignore-unmatch . '*' > /dev/null 2>&1
-          # Remove any remaining UNTRACKED files and directories from the root,
-          # being careful not to remove .git itself.
-          find . -maxdepth 1 -not -name '.git' -not -name '.' -not -name '..' -exec rm -rf {} + 2>/dev/null
+          echo "Current working directory after gh-pages checkout: $(pwd)"
+          echo "Checking for .git directory after gh-pages checkout (before clean):"
+          ls -la .git || (echo ".git directory not found after gh-pages checkout, before clean!" && exit 1)
+
+
+          echo "Cleaning gh-pages branch working directory..."
+          # Reset any local changes to match the HEAD of the gh-pages branch.
+          # This ensures tracked files are in their committed state.
+          git reset --hard HEAD
+
+          # Remove all untracked files and directories.
+          # -d: remove untracked directories.
+          # -f: force (needed if clean.requireForce is not false).
+          # -x: remove ignored files as well (this is a very thorough clean).
+          # git clean WILL NOT remove the .git directory.
+          git clean -fdx
+
+          echo "Current working directory after clean: $(pwd)"
+          echo "Checking for .git directory after clean:"
+          ls -la .git || (echo "CRITICAL ERROR: .git directory NOT FOUND after git clean -fdx!" && exit 1)
 
           echo "Copying built documentation from $TEMP_BUILD_DIR/build_output/ to gh-pages root..."
-          # Use rsync to copy the new site content from the preserved temporary location.
-          # The trailing slash on the source "$TEMP_BUILD_DIR/build_output/" means "copy the contents of this directory".
           rsync -av --delete "$TEMP_BUILD_DIR/build_output/" .
 
           echo "Committing and pushing to gh-pages..."
+          echo "Current working directory before git add: $(pwd)"
+          echo "Checking for .git directory before git add:"
+          ls -la .git || (echo "CRITICAL ERROR: .git directory NOT FOUND before git add!" && exit 1)
+          
           git add .
 
           if git diff-index --quiet HEAD --; then
@@ -103,7 +119,9 @@ jobs:
           git checkout "$CURRENT_REF"
 
           echo "Cleaning up temporary build directory: $TEMP_BUILD_DIR"
-          rm -rf "$TEMP_BUILD_DIR""
+          rm -rf "$TEMP_BUILD_DIR"
+          
+          set +x # Disable command tracing
 
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3
