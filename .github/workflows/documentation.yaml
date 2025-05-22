@@ -31,16 +31,29 @@ jobs:
           source .venv/bin/activate # Activate the virtual environment
 
           echo "Building documentation with sphinx-multiversion..."
-          # Clean any previous build output and create the html directory
-          rm -rf html
-          mkdir html
+          # Clean any previous local build html dir and ensure output path is clear
+          rm -rf "$GITHUB_WORKSPACE/html"
           # Build documentation. Output will be in $GITHUB_WORKSPACE/html/
-          sphinx-multiversion docs/ html/
+          # Using an absolute path for sphinx-multiversion output for clarity
+          sphinx-multiversion docs/ "$GITHUB_WORKSPACE/html/"
           # Copy the main index file
-          cp docs/assets/index.html html/index.html
+          cp "$GITHUB_WORKSPACE/docs/assets/index.html" "$GITHUB_WORKSPACE/html/index.html"
 
           echo "Documentation built in $GITHUB_WORKSPACE/html/"
-          ls -lA "$GITHUB_WORKSPACE/html/"
+          ls -lA "$GITHUB_WORKSPACE/html/" # List contents for verification
+
+          # === Critical: Check if build output exists and is not empty ===
+          if ! [ -d "$GITHUB_WORKSPACE/html" ] || ! [ "$(ls -A $GITHUB_WORKSPACE/html)" ]; then
+            echo "Error: Build output directory $GITHUB_WORKSPACE/html is empty or does not exist after build."
+            exit 1
+          fi
+
+          echo "Moving build artifacts to a temporary location..."
+          TEMP_BUILD_DIR=$(mktemp -d) # Create a temporary directory
+          # Move the entire 'html' directory into the temporary location
+          mv "$GITHUB_WORKSPACE/html" "$TEMP_BUILD_DIR/build_output"
+          echo "Build artifacts moved to $TEMP_BUILD_DIR/build_output"
+          ls -lA "$TEMP_BUILD_DIR/build_output" # Verify contents in new location
 
           # Configure Git user for commit
           git config --global user.name "GitHub Actions Bot"
@@ -55,33 +68,30 @@ jobs:
 
           echo "Switching to gh-pages branch..."
           git fetch --all # Ensure all remote branches are available
-          # Create gh-pages if it doesn't exist locally, then checkout
           if git rev-parse --verify origin/gh-pages > /dev/null 2>&1; then
-            git checkout gh-pages
-            git pull origin gh-pages # Ensure it's up-to-date
+            git checkout gh-pages # This will set up tracking if not already
+            git pull origin gh-pages # Ensure it's up-to-date with remote
           else
+            echo "gh-pages branch does not exist on origin. Creating a new orphan branch."
             git checkout --orphan gh-pages
           fi
           
           echo "Cleaning gh-pages branch working directory (current dir: $(pwd))..."
-          # Remove all existing files in the gh-pages branch root to avoid conflicts.
-          # This deletes all files and directories except for the .git directory itself.
-          # Use git rm for tracked files, then a find command for untracked.
-          git rm -rf . '*' > /dev/null 2>&1 # Stage deletions of all tracked files/dirs
-          # Remove any remaining untracked files/dirs (except .git)
-          find . -maxdepth 1 -not -name '.git' -not -name '.' -not -name '..' -exec rm -rf {} \;
+          # Remove all existing TRÄCKED files in the gh-pages branch root.
+          # --ignore-unmatch prevents error if no files are matched (e.g., new orphan branch)
+          git rm -rf --ignore-unmatch . '*' > /dev/null 2>&1
+          # Remove any remaining UNTRACKED files and directories from the root,
+          # being careful not to remove .git itself.
+          find . -maxdepth 1 -not -name '.git' -not -name '.' -not -name '..' -exec rm -rf {} + 2>/dev/null
 
-          echo "Copying built documentation from $GITHUB_WORKSPACE/html/ to gh-pages root..."
-          # Use rsync to copy the new site content from the original build location.
-          # The trailing slash on the source ($GITHUB_WORKSPACE/html/) means "copy the contents of this directory".
-          # --delete ensures that files/directories in the destination (gh-pages root)
-          # that are NOT in the source (the new build) are removed.
-          rsync -av --delete "$GITHUB_WORKSPACE/html/" .
+          echo "Copying built documentation from $TEMP_BUILD_DIR/build_output/ to gh-pages root..."
+          # Use rsync to copy the new site content from the preserved temporary location.
+          # The trailing slash on the source "$TEMP_BUILD_DIR/build_output/" means "copy the contents of this directory".
+          rsync -av --delete "$TEMP_BUILD_DIR/build_output/" .
 
           echo "Committing and pushing to gh-pages..."
           git add .
 
-          # Check if there are any changes to commit
           if git diff-index --quiet HEAD --; then
             echo "No changes to commit to gh-pages."
           else
@@ -91,6 +101,9 @@ jobs:
 
           echo "Switching back to original ref: $CURRENT_REF"
           git checkout "$CURRENT_REF"
+
+          echo "Cleaning up temporary build directory: $TEMP_BUILD_DIR"
+          rm -rf "$TEMP_BUILD_DIR""
 
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3
