@@ -25,112 +25,19 @@ jobs:
 
       - name: Build docs
         run: |
-          set -x # Enable command tracing for debugging
-
-          # Setup Python environment and install dependencies
           uv sync
           uv pip install --group doc
           source .venv/bin/activate
-
-          echo "Current working directory: $(pwd)"
-          echo "Checking for .git directory initially:"
-          ls -la .git || echo ".git directory not found at initial stage!"
-
-          echo "Building documentation with sphinx-multiversion..."
-          rm -rf "$GITHUB_WORKSPACE/html"
-          sphinx-multiversion docs/ "$GITHUB_WORKSPACE/html/"
-          cp "$GITHUB_WORKSPACE/docs/assets/index.html" "$GITHUB_WORKSPACE/html/index.html"
-
-          echo "Documentation built in $GITHUB_WORKSPACE/html/"
-          ls -lA "$GITHUB_WORKSPACE/html/"
-
-          if ! [ -d "$GITHUB_WORKSPACE/html" ] || ! [ "$(ls -A $GITHUB_WORKSPACE/html)" ]; then
-            echo "Error: Build output directory $GITHUB_WORKSPACE/html is empty or does not exist after build."
-            exit 1
-          fi
-
-          echo "Moving build artifacts to a temporary location..."
-          TEMP_BUILD_DIR=$(mktemp -d)
-          mv "$GITHUB_WORKSPACE/html" "$TEMP_BUILD_DIR/build_output"
-          echo "Build artifacts moved to $TEMP_BUILD_DIR/build_output"
-          ls -lA "$TEMP_BUILD_DIR/build_output"
-
-          git config --global user.name "GitHub Actions Bot"
-          git config --global user.email "github-actions-bot@users.noreply.github.com"
-
-          CURRENT_REF=$(git rev-parse --abbrev-ref HEAD)
-          if [ "$CURRENT_REF" = "HEAD" ]; then
-            CURRENT_REF=$(git rev-parse HEAD)
-          fi
-          echo "Current reference is $CURRENT_REF"
-          echo "Current working directory before gh-pages checkout: $(pwd)"
-          echo "Checking for .git directory before gh-pages checkout:"
-          ls -la .git || echo ".git directory not found before gh-pages checkout!"
-
-          echo "Switching to gh-pages branch..."
+          mkdir html
           git fetch --all
-          if git rev-parse --verify origin/gh-pages > /dev/null 2>&1; then
-            git checkout gh-pages
-            git pull origin gh-pages
-          else
-            echo "gh-pages branch does not exist on origin. Creating a new orphan branch."
-            git checkout --orphan gh-pages
-          fi
-          
-          echo "Current working directory after gh-pages checkout: $(pwd)"
-          echo "Checking for .git directory after gh-pages checkout (before clean):"
-          ls -la .git || (echo ".git directory not found after gh-pages checkout, before clean!" && exit 1)
-
-
-          echo "Cleaning gh-pages branch working directory..."
-          # Reset any local changes to match the HEAD of the gh-pages branch.
-          # This ensures tracked files are in their committed state.
-          git reset --hard HEAD
-
-          # Remove all untracked files and directories.
-          # -d: remove untracked directories.
-          # -f: force (needed if clean.requireForce is not false).
-          # -x: remove ignored files as well (this is a very thorough clean).
-          # git clean WILL NOT remove the .git directory.
-          git clean -fdx
-
-          echo "Current working directory after clean: $(pwd)"
-          echo "Checking for .git directory after clean:"
-          ls -la .git || (echo "CRITICAL ERROR: .git directory NOT FOUND after git clean -fdx!" && exit 1)
-
-          echo "Copying built documentation from $TEMP_BUILD_DIR/build_output/ to gh-pages root..."
-          rsync -av --delete "$TEMP_BUILD_DIR/build_output/" .
-
-          echo "Committing and pushing to gh-pages..."
-          echo "Current working directory before git add: $(pwd)"
-          echo "Checking for .git directory before git add:"
-          ls -la .git || (echo "CRITICAL ERROR: .git directory NOT FOUND before git add!" && exit 1)
-          
-          git add .
-
-          if git diff-index --quiet HEAD --; then
-            echo "No changes to commit to gh-pages."
-          else
-            git commit -m "Deploy documentation from ref ${{ github.ref }} (commit ${{ github.sha }})"
-            git push origin gh-pages
-          fi
-
-          echo "Switching back to original ref: $CURRENT_REF"
-          git checkout "$CURRENT_REF"
-
-          echo "Cleaning up temporary build directory: $TEMP_BUILD_DIR"
-          rm -rf "$TEMP_BUILD_DIR"
-          
-          set +x # Disable command tracing
+          sphinx_multiversion docs html
+          cp docs/assets/index.html html/index.html
 
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # This path is relative to $GITHUB_WORKSPACE after checking back to CURRENT_REF.
-          # It should point to the directory that sphinx-multiversion originally built into.
           path: html/
 
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-        # This action uses the artifact uploaded in the previous step.
