@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 from hybra.utils import audfilters, condition_number
 from hybra.utils import plot_response as plot_response_
-from hybra.utils import plot_coefficients as plot_coefficients_
+from hybra.utils import ISACgram as ISACgram_
 from hybra._fit_dual import fit, tight
 
 class ISAC(nn.Module):
@@ -17,7 +17,7 @@ class ISAC(nn.Module):
                  stride:int=None,
                  fs:int=16000, 
                  L:int=16000,
-                 bw_multiplier:float=1,
+                 supp_mult:float=1,
                  scale:str='erb',
                  tighten=False,
                  is_encoder_learnable=False,
@@ -26,17 +26,19 @@ class ISAC(nn.Module):
         super().__init__()
 
         [kernels, d, fc, fc_min, fc_max, kernel_min, kernel_size, Ls] = audfilters(
-            kernel_size=kernel_size, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, bw_multiplier=bw_multiplier, scale=scale
+            kernel_size=kernel_size, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, supp_mult=supp_mult, scale=scale
         )
+
+        print(f"Max kernel size: {kernel_size}")
 
         if stride is not None:
             if stride > d:
                 print(f"Using stride {stride} instead of the optimal {d} may affect the condition number 🌪️.")
             d = stride
             Ls = int(torch.ceil(torch.tensor(L / d)) * d)
-            print(f"The output length is set to {Ls}.")
+            print(f"Output length: {Ls}")
         else:
-            print(f"The optimal stride is {d} and the output length is set to {Ls}.")
+            print(f"Optimal stride: {d}\nOutput length: {Ls}")
             
         self.kernels = kernels
         self.stride = d
@@ -78,7 +80,7 @@ class ISAC(nn.Module):
                 self.register_buffer('decoder_kernels_imag', decoder_kernels_imag)
 
     def forward(self, x):
-        x = F.pad(x.unsqueeze(1), (self.kernel_size//2, self.kernel_size//2), mode='circular')
+        x = F.pad(x, (self.kernel_size//2, self.kernel_size//2), mode='circular')
 
         out_real = F.conv1d(x, self.kernels_real.to(x.device).unsqueeze(1), stride=self.stride)
         out_imag = F.conv1d(x, self.kernels_imag.to(x.device).unsqueeze(1), stride=self.stride)
@@ -132,10 +134,10 @@ class ISAC(nn.Module):
         else:
             raise NotImplementedError("No decoder configured")
 
-    def plot_coefficients(self, x):
+    def ISACgram(self, x):
         with torch.no_grad():
-            coefficients = torch.log10(torch.abs(self.forward(x)[0]**2))
-        plot_coefficients_(coefficients, self.fc, self.Ls, self.fs)
+            coefficients = self.forward(x)
+        ISACgram_(coefficients, self.fc, self.Ls, self.fs)
 
     @property
     def condition_number(self):
