@@ -12,13 +12,16 @@ authors = [
 ]
 description = "A module for trainable encoder/decoder filterbanks with auditory bias."
 readme = "README.md"
-license = {file = "LICENSE"}
+license-files = ["LICENSE"]
 keywords = ["Filberbank", "Learned Filterbanks", "Feauture Extraction", "Hybrid Filterbanks", "Encoder", "Decoder", "Auditory", "Frames"]
 classifiers = [
   "Programming Language :: Python"
 ]
 [project.urls]
 Repository = "https://github.com/danedane-haider/Hybrid-Auditory-Filterbanks.git"
+
+[tool.setuptools.packages.find]
+include = ["hybra"]
 
 [dependency-groups]
 dev = [
