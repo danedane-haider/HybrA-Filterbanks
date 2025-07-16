@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 from hybra.utils import audfilters
 from hybra.utils import plot_response as plot_response_
-from hybra.utils import plot_coefficients as plot_coefficients_
+from hybra.utils import ISACgram as ISACgram_
 
 class ISACMelSpectrogram(nn.Module):
     def __init__(self,
@@ -85,10 +85,10 @@ class ISACMelSpectrogram(nn.Module):
 
         return output
 
-    def plot_coefficients(self, x):
+    def ISACgram(self, x):
         with torch.no_grad():
             coefficients = self.forward(x)
-        plot_coefficients_(coefficients, self.fc, self.Ls, self.fs)
+        ISACgram_(coefficients, self.fc, self.Ls, self.fs)
 
     def plot_response(self):
         plot_response_(g=(self.kernels_real + 1j*self.kernels_imag).detach().numpy(), fs=self.fs, scale=True, fc_min=self.fc_min, fc_max=self.fc_max, kernel_min=self.kernel_min)

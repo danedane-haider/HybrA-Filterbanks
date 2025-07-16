@@ -1,0 +1,43 @@
+name: documentation
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: write # Needed to push to gh-pages branch
+  pages: write    # Needed for actions/deploy-pages
+  id-token: write # Needed for actions/deploy-pages
+
+jobs:
+  docs:
+    # if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Important for sphinx-multiversion to get tags
+
+      - name: Install uv
+        run: pipx install uv
+
+      - name: Build docs
+        run: |
+          uv sync
+          uv pip install --group doc
+          source .venv/bin/activate
+          mkdir html
+          git fetch --all
+          sphinx_multiversion docs html
+          cp docs/assets/index.html html/index.html
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: html/
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

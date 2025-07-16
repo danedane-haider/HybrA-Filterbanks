@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from hybra.utils import condition_number, fir_tightener3000, audfilters, plot_response
-from hybra.utils import plot_coefficients as plot_coefficients_
+from hybra.utils import ISACgram as ISACgram_
 from hybra._fit_dual import tight_hybra
 
 class HybrA(nn.Module):
@@ -209,7 +209,7 @@ class HybrA(nn.Module):
         plot_response((self.hybra_kernels_real + 1j*self.hybra_kernels_imag).squeeze().cpu().detach().numpy(), self.fs)
     def plot_decoder_response(self):
         plot_response((self.hybra_kernels_real + 1j*self.hybra_kernels_imag).squeeze().cpu().detach().numpy(), self.fs, decoder=True)
-    def plot_coefficients(self, x):
+    def ISACgram(self, x):
         with torch.no_grad():
             coefficients = torch.log10(torch.abs(self.forward(x)[0]**2))
-        plot_coefficients_(coefficients, self.fc, self.Ls, self.fs)
+        ISACgram_(coefficients, self.fc, self.Ls, self.fs)
