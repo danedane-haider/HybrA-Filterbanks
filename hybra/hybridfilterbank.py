@@ -3,7 +3,7 @@ from typing import Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from hybra.utils import condition_number, fir_tightener3000, audfilters, plot_response
+from hybra.utils import condition_number, audfilters, plot_response
 from hybra.utils import ISACgram as ISACgram_
 from hybra._fit_dual import tight_hybra
 
@@ -16,23 +16,23 @@ class HybrA(nn.Module):
                  fc_max:Union[float,int]=None,
                  fs:int=16000, 
                  L:int=16000,
-                 bw_multiplier:float=1,
-                 scale:str='erb',
-                 tighten:bool=True,
+                 supp_mult:float=1,
+                 scale:str='mel',
+                 tighten:bool=False,
                  det_init:bool=False):
         """HybrA filterbank.
 
         Parameters:
         -----------
-        kernel_size (int) - size of the kernela
+        kernel_size (int) - size of the kernels of the auditory filterbank
         learned_kernel_size (int) - size of the learned kernels
         num_channels (int) - number of channels
-        stride (int) - stride of the convolutional layers
-        fc_max (float) - maximum frequency on the auditory scale
+        stride (int) - stride of the auditory filterbank. if 'None', stride is set to yield 25% overlap
+        fc_max (float) - maximum frequency on the auditory scale. if 'None', it is set to fs//2.
         fs (int) - sampling frequency
         L (int) - signal length
-        bw_multiplier (float) - bandwidth multiplier
-        scale (str) - auditory scale ('erb', 'mel', 'bark', 'log)
+        supp_mult (float) - support multiplier. 
+        scale (str) - auditory scale ('mel', 'erb', 'bark', 'log10', 'elelog'). elelog is a scale adapted to the hearing of elephants
         tighten (bool) - whether to tighten the hybrid filterbank
         det_init (bool) - whether to initialize the learned filters with diracs
         """
@@ -40,7 +40,7 @@ class HybrA(nn.Module):
         super().__init__()
 
         [kernels, d, fc, _, _, _, kernel_size, Ls] = audfilters(
-            kernel_size=kernel_size, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, bw_multiplier=bw_multiplier, scale=scale
+            kernel_size=kernel_size, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, supp_mult=supp_mult, scale=scale
         )
 
         if stride is not None:
@@ -51,13 +51,13 @@ class HybrA(nn.Module):
             print(f"The optimal stride for ISAC is {d} and the output length is set to {Ls}.")
 
         self.aud_kernels = kernels
-        self.stride = d
-        self.fc = fc
         self.kernel_size = kernel_size
+        self.learned_kernel_size = learned_kernel_size
+        self.stride = d
+        self.num_channels = num_channels
+        self.fc = fc
         self.Ls = Ls
         self.fs = fs
-        self.num_channels = num_channels
-        self.learned_kernel_size = learned_kernel_size
 
         self.aud_kernels_real = kernels.real.to(torch.float32)
         self.aud_kernels_imag = kernels.imag.to(torch.float32)

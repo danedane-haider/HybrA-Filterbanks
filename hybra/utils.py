@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 
+import torch.nn.functional as F
 from typing import Union, Tuple
 
 ####################################################################################################
@@ -65,29 +66,40 @@ def condition_number(w:torch.Tensor, d:int, Ls:int=None) -> torch.Tensor:
     A, B = frame_bounds(w, d, Ls)
     return B / A
 
-def frequency_correlation(w:torch.Tensor, d:int, Ls:int=None, diag_only:bool=False) -> torch.Tensor:
+def frequency_correlation(w: torch.Tensor, d: int, Ls: int = None, diag_only: bool = False) -> torch.Tensor:
     """
-    Computes the frequency correlation functions.
+    Computes the frequency correlation functions (vectorized version).
     Parameters:
-        w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[num_channels, sig_length]
-        d (int): Decimation factor, must divide filter length!
-    Output:
-        G: (Ls x d) matrix with frequency correlations as columns
+        w: (J, K) - Impulse responses
+        d: Decimation factor
+        Ls: FFT length (default: nearest multiple of d ≥ 2K-1)
+        diag_only: If True, only return diagonal (i.e., PSD)
+    Returns:
+        G: (d, Ls) complex tensor with frequency correlations
     """
+    K = w.shape[-1]
     if Ls is None:
-        Ls = int(torch.ceil(torch.tensor(w.shape[-1] * 2 / d)) * d)
-    w_full = torch.cat([w, torch.conj(w)], dim=0) 
-    w_hat = torch.fft.fft(w_full, Ls, dim=-1).T
+        Ls = int(torch.ceil(torch.tensor((2 * K - 1) / d)) * d)
+    w_full = torch.cat([w, torch.conj(w)], dim=0)
+    w_hat = torch.fft.fft(w_full, Ls, dim=-1)  # shape: [J, Ls]
     N = Ls
-    assert N % d == 0, "Oh no! Decimation factor must divide signal length!"
-    G = torch.zeros(N, d, dtype=w_hat.dtype)
-    G[:,0] = torch.sum(w_hat.abs()**2, dim=-1)
+    assert N % d == 0, "Decimation factor must divide FFT length"
+
+    # Diagonal: sum_j |w_hat_j|^2
+    diag = torch.sum(w_hat.abs() ** 2, dim=0)  # shape: [Ls]
+
     if diag_only:
-        return torch.real(G[:,0])
-    else:
-        for j in range(1,d):
-            G[:,j] = torch.sum(w_hat * torch.conj(w_hat.roll(j * N//d, 0)), dim=1)
-        return G.T
+        return torch.real(diag)
+
+    G = [diag]  # G[0] = diagonal
+
+    for j in range(1, d):
+        rolled = torch.roll(w_hat, shifts=j * (N // d), dims=-1)
+        val = torch.sum(w_hat * torch.conj(rolled), dim=0)
+        G.append(val)
+
+    G = torch.stack(G, dim=0)  # shape: [d, Ls]
+    return G
 
 def alias(w:torch.Tensor, d:int, Ls:Union[int,None]=None, diag_only:bool=False) -> torch.Tensor:
     """
@@ -100,9 +112,11 @@ def alias(w:torch.Tensor, d:int, Ls:Union[int,None]=None, diag_only:bool=False) 
     """
     G = frequency_correlation(w=w, d=d, Ls=Ls, diag_only=diag_only)
     if diag_only:
-        return torch.max(G).div(torch.min(G)) - 1
+        return torch.max(G).div(torch.min(G))
     else:
-        return torch.max(torch.real(G[0,:])).div(torch.min(torch.real(G[0,:]))) - 1 + torch.sum(torch.max(G[1::,:].abs(), dim=-1)[0])
+        #return torch.max(torch.real(G[0,:])).div(torch.min(torch.real(G[0,:]))) + torch.sum(torch.norm(G[1::,:], p=2, dim=-1), dim=-1) - 1
+        return torch.norm(torch.real(G[0,:])-torch.ones_like(G[0,:]), p=2) + torch.sum(torch.norm(G[1::,:], p=2, dim=-1), dim=-1)
+
 
 def can_tight(w:torch.Tensor, d:int, Ls:int) -> torch.Tensor:
     """
@@ -158,6 +172,23 @@ def fir_tightener3000(w:torch.Tensor, supp:int, d:int, eps:float=1.01, Ls:Union[
     else:
         return w_tight[:,:supp]
     
+def upsample(x:torch.Tensor, d:int) -> torch.Tensor:
+    N = x.shape[1]
+    x_up = torch.zeros(x.shape[0], N*d, dtype=x.dtype, device=x.device)
+    x_up[:, ::d] = x
+    return x_up
+
+def circ_conv(x_in:torch.Tensor, kernels:torch.Tensor, d:int=1) -> torch.Tensor:
+    K = kernels.shape[1]
+    x = F.pad(x_in, (K-1, 0), mode='circular')
+    x_out = F.conv1d(x, torch.fliplr(torch.conj(kernels)).unsqueeze(1), stride=d)
+    return x_out
+
+def circ_conv_transpose(y_in:torch.Tensor, kernels:torch.Tensor, d:int=1) -> torch.Tensor:
+    K = kernels.shape[1]
+    L = y_in.shape[1]
+    y_out = F.conv1d(F.pad(upsample(y_in,d), (0, K), mode='circular'), kernels.unsqueeze(0), stride=1)
+    return y_out[:, :-1].real
 
 ####################################################################################################
 ################### Routines for constructing auditory filterbanks #################################
@@ -432,7 +463,7 @@ def bwtofc(bw:Union[float,int,torch.Tensor], scale="erb"):
         fc = torch.sqrt(((bw - 25) / 75)**(1 / 0.69) / 1.4e-6)
     elif scale == "mel":
         fc = 1000 * (bw / torch.log10(torch.tensor(17 / 7))) - 700
-    elif scale in ["log10"]:
+    elif scale == "log10":
         fc = bw
     else:
         raise ValueError(f"Unsupported auditory scale: {scale}")
@@ -495,7 +526,7 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
         fc_max (int): Maximum frequency (in Hz) that should lie on the aud scale.
         fs (int): Sampling rate.
         L (int): Signal length.
-        bw_multiplier (float): Bandwidth multiplier.
+        supp_mult (float): Support multiplier.
         scale (str): Auditory scale.
     
     Returns:
@@ -509,6 +540,23 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
             kernel_size (int): Maximum kernel size.
             L (int): Admissible signal length.
     """
+
+    # check if all inputs are valid
+    if kernel_size is not None and kernel_size <= 0:
+        raise ValueError("kernel_size must be a positive integer.")
+    if num_channels <= 0:
+        raise ValueError("num_channels must be a positive integer.")
+    # check if fs is a positive integer
+    if not isinstance(fs, int) or fs <= 0:
+        raise ValueError("fs must be a positive integer.")
+    if not isinstance(fs, int) or L <= 0:
+        raise ValueError("L must be a positive integer.")
+    if supp_mult < 0:
+        raise ValueError("supp_mult must be a non-negative float.")
+    if scale not in ['mel', 'erb', 'bark', 'log10', 'elelog']:
+        raise ValueError("scale must be one of 'mel', 'erb', 'bark', 'log10', or 'elelog'.")
+    if fc_max is not None and (fc_max <= 0 or fc_max >= fs // 2):
+        raise ValueError("fc_max must be a positive integer less than fs/2.")
 
     ####################################################################################################
     # Bandwidth conversion
@@ -622,7 +670,7 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
     # Generate filters
     ####################################################################################################
 
-    g = torch.zeros((num_channels, kernel_size), dtype=torch.complex128)
+    g = torch.zeros((num_channels, kernel_size), dtype=torch.complex64)
 
     g[0,:] = torch.sqrt(d) * firwin(kernel_size) / torch.sqrt(torch.tensor(2))
     g[-1,:] = torch.sqrt(d) * modulate(firwin(tsupp[-1], kernel_size), fs//2, fs) / torch.sqrt(torch.tensor(2))

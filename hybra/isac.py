@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from hybra.utils import audfilters, condition_number
+from hybra.utils import audfilters, condition_number, upsample, circ_conv, circ_conv_transpose
 from hybra.utils import plot_response as plot_response_
 from hybra.utils import ISACgram as ISACgram_
 from hybra._fit_dual import fit, tight
@@ -18,76 +18,80 @@ class ISAC(nn.Module):
                  fs:int=16000, 
                  L:int=16000,
                  supp_mult:float=1,
-                 scale:str='erb',
+                 scale:str='mel',
                  tighten=False,
                  is_encoder_learnable=False,
                  use_decoder=False,
-                 is_decoder_learnable=False,):
+                 is_decoder_learnable=False,
+                 verbose:bool=True):
         super().__init__()
 
         [kernels, d, fc, fc_min, fc_max, kernel_min, kernel_size, Ls] = audfilters(
             kernel_size=kernel_size, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, supp_mult=supp_mult, scale=scale
         )
 
-        print(f"Max kernel size: {kernel_size}")
-
+        if verbose:
+            print(f"Max kernel size: {kernel_size}")
         if stride is not None:
             if stride > d:
-                print(f"Using stride {stride} instead of the optimal {d} may affect the condition number 🌪️.")
+                if verbose:
+                    print(f"Warning: stride {stride} is larger than the optimal stride {d}, may affect condition number 🌪️.")
             d = stride
             Ls = int(torch.ceil(torch.tensor(L / d)) * d)
-            print(f"Output length: {Ls}")
+            if verbose:
+                print(f"Output length: {Ls}")
         else:
-            print(f"Optimal stride: {d}\nOutput length: {Ls}")
+            if verbose:
+                print(f"Optimal stride: {d}\nOutput length: {Ls}")
             
         self.kernels = kernels
-        self.stride = d
+        self.kernel_size = kernel_size
+        self.kernel_min = kernel_min
         self.fc = fc
         self.fc_min = fc_min
         self.fc_max = fc_max
-        self.kernel_min = kernel_min
-        self.kernel_size = kernel_size
+        self.stride = d
         self.Ls = Ls
         self.fs = fs
         self.scale = scale
-
-        k_real = kernels.real.to(torch.float32)
-        k_imag = kernels.imag.to(torch.float32)
         
         if tighten:
             max_iter = 1000
             fit_eps = 1.01
-            k_real, k_imag, _ = tight(k_real+1j*k_imag, d, Ls, fs, fit_eps, max_iter)
+            kernels, _ = tight(kernels, d, Ls, fs, fit_eps, max_iter)
 
         if is_encoder_learnable:
-            self.register_parameter('kernels_real', nn.Parameter(k_real, requires_grad=True))
-            self.register_parameter('kernels_imag', nn.Parameter(k_imag, requires_grad=True))
+            self.register_buffer('kernels_complex', nn.Parameter(kernels, requires_grad=True))
         else:
-            self.register_buffer('kernels_real', k_real)
-            self.register_buffer('kernels_imag', k_imag)
+            self.register_buffer('kernels_complex', kernels)
         
         self.use_decoder = use_decoder
         if use_decoder:
             max_iter = 1000 # TODO: should we do something like that?
             decoder_fit_eps = 1e-6
-            decoder_kernels_real, decoder_kernels_imag, _, _ = fit(k_real+1j*k_imag, d, Ls, fs, decoder_fit_eps, max_iter)
+            decoder_kernels, _, _ = fit(kernels.clone(), d, Ls, fs, decoder_fit_eps, max_iter)
 
             if is_decoder_learnable:
-                self.register_parameter('decoder_kernels_real', nn.Parameter(decoder_kernels_real, requires_grad=True))
-                self.register_parameter('decoder_kernels_imag', nn.Parameter(decoder_kernels_imag, requires_grad=True))
-            else:        	
-                self.register_buffer('decoder_kernels_real', decoder_kernels_real)
-                self.register_buffer('decoder_kernels_imag', decoder_kernels_imag)
+                self.register_buffer('decoder_kernels_complex', nn.Parameter(decoder_kernels, requires_grad=True))
+            else:    
+                self.register_buffer('decoder_kernels_complex', decoder_kernels)
 
     def forward(self, x):
-        x = F.pad(x, (self.kernel_size//2, self.kernel_size//2), mode='circular')
+        """Filterbank analysis.
+        Parameters:
+        -----------
+        x (torch.Tensor) - input tensor of shape (batch_size, signal_length)
+        Returns:
+        --------
+        x (torch.Tensor) - output tensor of shape (batch_size, num_channels, signal_length//hop_length)
+        """
+        x = torch.fft.fft(x, self.Ls, dim=-1) * torch.fft.fft(self.kernels_complex, self.Ls, dim=-1).unsqueeze(0)
+        x = torch.fft.ifft(x, self.Ls, dim=-1)
+        x = x[:, :, ::self.stride]
+        #x = torch.roll(input=x, shifts=-self.kernel_size.item() // 2, dim=-1)
+        return x
 
-        out_real = F.conv1d(x, self.kernels_real.to(x.device).unsqueeze(1), stride=self.stride)
-        out_imag = F.conv1d(x, self.kernels_imag.to(x.device).unsqueeze(1), stride=self.stride)
-
-        return out_real + 1j * out_imag
-
-    def decoder(self, x_real:torch.Tensor, x_imag:torch.Tensor) -> torch.Tensor:
+    def decoder(self, x:torch.Tensor) -> torch.Tensor:
         """Filterbank synthesis.
 
         Parameters:
@@ -98,39 +102,21 @@ class ISAC(nn.Module):
         --------
         x (torch.Tensor) - output tensor of shape (batch_size, signal_length)
         """
-        L_in = x_real.shape[-1]
-        L_out = self.Ls
 
-        kernel_size = self.kernel_size
-        padding = kernel_size // 2
-
-        # L_out = (L_in -1) * stride - 2 * padding + dialation * (kernel_size - 1) + output_padding + 1 ; dialation = 1
-        output_padding = L_out - (L_in - 1) * self.stride + 2 * padding - kernel_size
-        
-        x = (
-            F.conv_transpose1d(
-                x_real,
-                self.decoder_kernels_real.to(x_real.device).unsqueeze(1),
-                stride=self.stride,
-                padding=padding,
-                output_padding=output_padding
-            ) + F.conv_transpose1d(
-                x_imag,
-                self.decoder_kernels_imag.to(x_imag.device).unsqueeze(1),
-                stride=self.stride,
-                padding=padding,
-                output_padding=output_padding
-            )
-        )
-
+        x = upsample(x, self.stride)
+        if x.shape[-1] != self.Ls:
+            raise ValueError(f"Coefficients have the wrong length ({x.shape[-1]} instead of {self.Ls}).")
+        x = torch.fft.fft(x, self.Ls, dim=-1) * torch.fft.fft(torch.fliplr(torch.conj(self.decoder_kernels_complex)), self.Ls, dim=-1).unsqueeze(0)
+        x = torch.fft.ifft(x, self.Ls, dim=-1)
+        x = torch.sum(x, dim=0)
         return x.squeeze(1)
 
     def plot_response(self):
-        plot_response_(g=(self.kernels_real + 1j*self.kernels_imag).cpu().detach().numpy(), fs=self.fs, scale=self.scale, plot_scale=True, fc_min=self.fc_min, fc_max=self.fc_max, kernel_min=self.kernel_min)
+        plot_response_(g=(self.kernels_complex).cpu().detach().numpy(), fs=self.fs, scale=self.scale, plot_scale=True, fc_min=self.fc_min, fc_max=self.fc_max, kernel_min=self.kernel_min)
 
     def plot_decoder_response(self):
         if self.use_decoder:
-            plot_response_(g=(self.decoder_kernels_real+1j*self.decoder_kernels_imag).detach().cpu().numpy(), fs=self.fs, scale=self.scale, decoder=True)
+            plot_response_(g=(self.decoder_kernels_complex).detach().cpu().numpy(), fs=self.fs, scale=self.scale, decoder=True)
         else:
             raise NotImplementedError("No decoder configured")
 
@@ -141,12 +127,12 @@ class ISAC(nn.Module):
 
     @property
     def condition_number(self):
-        kernels = (self.kernels_real + 1j*self.kernels_imag).squeeze()
+        kernels = (self.kernels).squeeze()
         #kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
         return condition_number(kernels, int(self.stride), self.Ls)
     
     @property
     def condition_number_decoder(self):
-        kernels = (self.decoder_kernels_real + 1j*self.decoder_kernels_imag).squeeze()
+        kernels = (self.decoder_kernels_complex).squeeze()
         #kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
         return condition_number(kernels, int(self.stride), self.Ls)
