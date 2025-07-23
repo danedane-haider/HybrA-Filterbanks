@@ -73,10 +73,10 @@ class ISAC(nn.Module):
         # optional preprocessing
         
         if tighten:
-            aud_kernels = tight(aud_kernels, d, Ls, fs, fit_eps = 1.001, max_iter = 1000)
+            aud_kernels = tight(aud_kernels, d, Ls, fs, fit_eps = 1.0001, max_iter = 1000)
         
         if fit_decoder:
-            decoder_kernels = fit(aud_kernels.clone(), d, Ls, fs, decoder_fit_eps = 0.001, max_iter = 100)
+            decoder_kernels = fit(aud_kernels.clone(), d, Ls, fs, decoder_fit_eps = 0.0001, max_iter = 10000)
         else:
             decoder_kernels = aud_kernels.clone()
 
@@ -110,10 +110,7 @@ class ISAC(nn.Module):
         plot_response_(g=(self.kernels).cpu().detach().numpy(), fs=self.fs, scale=self.scale, plot_scale=True, fc_min=self.fc_min, fc_max=self.fc_max, kernel_min=self.kernel_min)
 
     def plot_decoder_response(self):
-        if self.use_decoder:
-            plot_response_(g=(self.decoder_kernels).detach().cpu().numpy(), fs=self.fs, scale=self.scale, decoder=True)
-        else:
-            raise NotImplementedError("No decoder configured")
+        plot_response_(g=(self.decoder_kernels).detach().cpu().numpy(), fs=self.fs, scale=self.scale, decoder=True)
 
     @property
     def condition_number(self):

@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import warnings
 
-from hybra.utils import condition_number, alias, upsample, circ_conv, circ_conv_transpose, frame_bounds
+from hybra.utils import condition_number, alias, circ_conv, circ_conv_transpose, frame_bounds
 
 class MSETight(nn.Module):
     def __init__(self, beta:float=0.0, fs:int=16000, diag_only:bool=False):
@@ -20,7 +20,7 @@ class MSETight(nn.Module):
             loss = self.loss(preds, target)
             return loss
         else:
-            r = alias(kernels, d, Ls, diag_only=self.diag_only)
+            r = alias(kernels, d, None, diag_only=self.diag_only)
             # use it for tightening only
             if preds is None:
                 return self.beta * r, r.item()
@@ -61,21 +61,22 @@ class ISACDual(nn.Module):
         self.register_buffer('kernels', kernels)
         self.register_parameter('decoder_kernels', nn.Parameter(kernels, requires_grad=True))
 
-        _, B = frame_bounds(kernels, d, Ls)
+        _, B = frame_bounds(kernels, d, None)
         self.B = B
 
 
     def forward(self, x):
-        _, B = frame_bounds(self.decoder_kernels, self.stride, self.Ls)
-        x = circ_conv(x, self.kernels, self.stride)
-        x = circ_conv_transpose(x, self.decoder_kernels / self.B, self.stride)
+        x = circ_conv(x.unsqueeze(1), self.kernels, self.stride)
+        x = circ_conv_transpose(x, self.decoder_kernels / self.B, self.stride).squeeze(1)
         return x.real
 
 def fit(kernels, d, Ls, fs, decoder_fit_eps, max_iter):
 
+    Ls = int(torch.ceil(torch.tensor((2 * kernels.shape[-1] - 1) / d)) * d)
+
     model = ISACDual(kernels, d, Ls)
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.0001, momentum=0.9)
-    criterion = MSETight(beta=1, fs=fs, diag_only=True)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+    criterion = MSETight(beta=1e-12, fs=fs, diag_only=True)
 
     losses = []
     kappas = []	
@@ -94,7 +95,7 @@ def fit(kernels, d, Ls, fs, decoder_fit_eps, max_iter):
         losses.append(loss.item())
         kappas.append(kappa)
 
-        error = (kappas[-1] - 1.0)**0.01
+        error = (kappas[-1] - 1.0)**0.001
         criterion.beta *= error
 
         if i > max_iter:
@@ -102,7 +103,7 @@ def fit(kernels, d, Ls, fs, decoder_fit_eps, max_iter):
             break
         i += 1
 
-    print(f"Final Stats:\n\tFinal PSD ratio: {kappas[-1]}\n\tBest MSE loss: {losses[-1]}")
+    print(f"Final Stats:\n\tPSD ratio: {kappas[-1]:.4f}\n\tMSE loss: {losses[-1]:.4f}")
     
     return model.decoder_kernels.detach()
 
@@ -132,7 +133,7 @@ class ISACTight(nn.Module):
 def tight(kernels, d, Ls, fs, fit_eps, max_iter):
 
     model = ISACTight(kernels, d, Ls)
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.00001, momentum=0.7)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
     criterion = MSETight(beta=1, fs=fs, diag_only=False)
 
     print(f"Init Condition number:\n\t{model.condition_number.item():.4f}")
@@ -151,9 +152,7 @@ def tight(kernels, d, Ls, fs, fit_eps, max_iter):
 
         k = condition_number(w=kernels, d=d, Ls=None).item()
         error = (k - 1.0)**0.01
-
-        for param_group in optimizer.param_groups:
-            param_group['lr'] *= error
+        criterion.beta *= error
 
         if i > max_iter:
             print(f"Max. iteration of {max_iter} reached.")
@@ -206,7 +205,7 @@ class HybrATight(nn.Module):
 def tight_hybra(aud_kernels, learned_kernels, d, Ls, fs, fit_eps, max_iter):
 
     model = HybrATight(aud_kernels, learned_kernels, d, Ls)
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.0001, momentum=0.7)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.0001)
     criterion = MSETight(beta=1, fs=fs)
 
     print(f"Init Condition number:\n\t{model.condition_number.item():.4f}")
@@ -225,9 +224,7 @@ def tight_hybra(aud_kernels, learned_kernels, d, Ls, fs, fit_eps, max_iter):
 
         k = condition_number(kernels, d, None).item()
         error = (k - 1.0)**0.01
-
-        for param_group in optimizer.param_groups:
-            param_group['lr'] *= error
+        criterion.beta *= error
 
         if i > max_iter:
             print(f"Max. iteration of {max_iter} reached.")
