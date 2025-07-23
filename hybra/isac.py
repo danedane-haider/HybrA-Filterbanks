@@ -73,10 +73,10 @@ class ISAC(nn.Module):
         # optional preprocessing
         
         if tighten:
-            aud_kernels = tight(aud_kernels, d, Ls, fs, fit_eps = 1.0001, max_iter = 1000)
+            aud_kernels = tight(aud_kernels, d, Ls, fs, fit_eps = 1.001, max_iter = 1000)
         
         if fit_decoder:
-            decoder_kernels = fit(aud_kernels.clone(), d, Ls, fs, decoder_fit_eps = 1e-4, max_iter = 100)
+            decoder_kernels = fit(aud_kernels.clone(), d, Ls, fs, decoder_fit_eps = 0.001, max_iter = 100)
         else:
             decoder_kernels = aud_kernels.clone()
 

@@ -827,8 +827,6 @@ def ISACgram(coefficients, fc, L, fs, fc_max=None, log_scale=False, vmin=None, c
 
     if fc_max is not None:
         c = c[:np.argmax(fc > fc_max), :]
-    
-    c = np.roll(c, -L//4, axis=-1)  # Center frequencies around zero
 
     if vmin is not None:
         mesh = ax.pcolor(c, cmap=cmap, vmin=np.min(c)*vmin)

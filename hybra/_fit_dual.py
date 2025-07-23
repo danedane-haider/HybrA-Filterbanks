@@ -75,7 +75,7 @@ def fit(kernels, d, Ls, fs, decoder_fit_eps, max_iter):
 
     model = ISACDual(kernels, d, Ls)
     optimizer = torch.optim.SGD(model.parameters(), lr=0.0001, momentum=0.9)
-    criterion = MSETight(beta=1e-12, fs=fs, diag_only=True)
+    criterion = MSETight(beta=1, fs=fs, diag_only=True)
 
     losses = []
     kappas = []	
@@ -132,10 +132,10 @@ class ISACTight(nn.Module):
 def tight(kernels, d, Ls, fs, fit_eps, max_iter):
 
     model = ISACTight(kernels, d, Ls)
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.0001, momentum=0.9)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.00001, momentum=0.7)
     criterion = MSETight(beta=1, fs=fs, diag_only=False)
 
-    print(f"Init Condition number:\n\t{model.condition_number.item()}")
+    print(f"Init Condition number:\n\t{model.condition_number.item():.4f}")
 
     loss_item = float('inf')
     i = 0
@@ -149,7 +149,7 @@ def tight(kernels, d, Ls, fs, fit_eps, max_iter):
         kappa.backward()
         optimizer.step()
 
-        k = condition_number(kernels, d, Ls).item()
+        k = condition_number(w=kernels, d=d, Ls=None).item()
         error = (k - 1.0)**0.01
 
         for param_group in optimizer.param_groups:
@@ -160,7 +160,7 @@ def tight(kernels, d, Ls, fs, fit_eps, max_iter):
             break
         i += 1
 
-    print(f"Final Condition number:\n\t{model.condition_number.item()}")
+    print(f"Final Condition number:\n\t{model.condition_number.item():.4f}")
     
     return model.kernels.detach()
 
@@ -177,77 +177,63 @@ class HybrATight(nn.Module):
         self.num_channels = aud_kernels.shape[0]
         self.Ls = Ls
 
-        self.register_buffer('aud_kernels_real', torch.real(aud_kernels).to(torch.float32))
-        self.register_buffer('aud_kernels_imag', torch.imag(aud_kernels).to(torch.float32))
+        self.register_buffer('kernels', aud_kernels)
+        self.register_parameter('learned_kernels', nn.Parameter(learned_kernels, requires_grad=True))
 
-        self.register_parameter('learned_kernels_real', nn.Parameter(learned_kernels.to(torch.float32), requires_grad=True))
-        self.register_parameter('learned_kernels_imag', nn.Parameter(learned_kernels.to(torch.float32), requires_grad=True))
-
-        self.hybra_kernels_real = F.conv1d(
-            self.aud_kernels_real.squeeze(1),
-            self.learned_kernels_real,
+        # initial hybrid filters
+        self.hybra_kernels = F.conv1d(
+            self.kernels.squeeze(1),
+            self.learned_kernels,
             groups=self.num_channels,
             padding="same",
-        ).unsqueeze(1)
-        self.hybra_kernels_imag = F.conv1d(
-            self.aud_kernels_imag.squeeze(1),
-            self.learned_kernels_imag,
-            groups=self.num_channels,
-            padding="same",
-        ).unsqueeze(1)
+        )
 
     def forward(self):
-
-        self.hybra_kernels_real = F.conv1d(
-            self.aud_kernels_real.squeeze(1),
-            self.learned_kernels_real,
+        self.hybra_kernels = F.conv1d(
+            self.kernels.squeeze(1),
+            self.learned_kernels,
             groups=self.num_channels,
             padding="same",
-        ).unsqueeze(1)
-        self.hybra_kernels_imag = F.conv1d(
-            self.aud_kernels_imag.squeeze(1),
-            self.learned_kernels_imag,
-            groups=self.num_channels,
-            padding="same",
-        ).unsqueeze(1)
+        )
         
-        return self.hybra_kernels_real + 1j*self.hybra_kernels_imag
+        return self.hybra_kernels
     
     @property
     def condition_number(self):
-        kernels = (self.hybra_kernels_real + 1j*self.hybra_kernels_imag).squeeze()
-        #kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
+        kernels = (self.hybra_kernels).squeeze()
         return condition_number(kernels, int(self.stride), self.Ls)
     
 def tight_hybra(aud_kernels, learned_kernels, d, Ls, fs, fit_eps, max_iter):
 
     model = HybrATight(aud_kernels, learned_kernels, d, Ls)
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.0001, momentum=0.7)
     criterion = MSETight(beta=1, fs=fs)
 
-    print(f"Init Condition number:\n\t{model.condition_number.item()}")
-
-    kappas = []	
+    print(f"Init Condition number:\n\t{model.condition_number.item():.4f}")
 
     loss_item = float('inf')
     i = 0
-    print("Tightening HybrA. This might take a bit 🏄")
+    print("Tightening HybrA 🏄")
     while loss_item >= fit_eps:
         optimizer.zero_grad()
         model()
-        kernels_real = model.hybra_kernels_real.squeeze()
-        kernels_imag = model.hybra_kernels_imag.squeeze()
+        kernels = model.hybra_kernels.squeeze()
         
-        kappa, kappa_item = criterion(preds=None, target=None, kernels=kernels_real + 1j*kernels_imag, d=d, Ls=None)
+        kappa, _ = criterion(preds=None, target=None, kernels=kernels, d=d, Ls=None)
         kappa.backward()
         optimizer.step()
-        kappas.append(kappa_item)
+
+        k = condition_number(kernels, d, None).item()
+        error = (k - 1.0)**0.01
+
+        for param_group in optimizer.param_groups:
+            param_group['lr'] *= error
 
         if i > max_iter:
             print(f"Max. iteration of {max_iter} reached.")
             break
         i += 1
 
-    print(f"Final Condition number:\n\t{model.condition_number.item()}")
+    print(f"Final Condition number:\n\t{model.condition_number.item():.4f}")
     
-    return model.learned_kernels_real.detach(), model.learned_kernels_imag.detach(), kappas
+    return model.learned_kernels.detach()
