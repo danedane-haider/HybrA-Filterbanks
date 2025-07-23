@@ -19,7 +19,8 @@ class HybrA(nn.Module):
                  supp_mult:float=1,
                  scale:str='mel',
                  tighten:bool=False,
-                 det_init:bool=False):
+                 det_init:bool=False,
+                 verbose:bool=True):
         """HybrA filterbank.
 
         Parameters:
@@ -39,18 +40,22 @@ class HybrA(nn.Module):
         
         super().__init__()
 
-        [kernels, d, fc, _, _, _, kernel_size, Ls] = audfilters(
+        [aud_kernels, d, fc, _, _, _, kernel_size, Ls] = audfilters(
             kernel_size=kernel_size, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, supp_mult=supp_mult, scale=scale
         )
 
         if stride is not None:
             d = stride
             Ls = int(torch.ceil(torch.tensor(L / d)) * d)
-            print(f"The output length is set to {Ls}.")
-        else:
-            print(f"The optimal stride for ISAC is {d} and the output length is set to {Ls}.")
 
-        self.aud_kernels = kernels
+        if verbose:
+            print(f"Max kernel size: {kernel_size}")
+            if stride is not None and stride > 0:
+                print(f"Warning: stride {stride} is larger than the optimal stride {d}, may affect condition number 🌪️.\nOutput length: {Ls}")
+            else:
+                print(f"Optimal stride: {d}\nOutput length: {Ls}")
+
+        self.aud_kernels = aud_kernels
         self.kernel_size = kernel_size
         self.learned_kernel_size = learned_kernel_size
         self.stride = d
@@ -59,8 +64,8 @@ class HybrA(nn.Module):
         self.Ls = Ls
         self.fs = fs
 
-        self.aud_kernels_real = kernels.real.to(torch.float32)
-        self.aud_kernels_imag = kernels.imag.to(torch.float32)
+        self.aud_kernels_real = aud_kernels.real.to(torch.float32)
+        self.aud_kernels_imag = aud_kernels.imag.to(torch.float32)
 
         self.register_buffer('kernels_real', self.aud_kernels_real)
         self.register_buffer('kernels_imag', self.aud_kernels_imag)
@@ -101,17 +106,6 @@ class HybrA(nn.Module):
         ).unsqueeze(1)
 
     def forward(self, x:torch.Tensor) -> torch.Tensor:
-        """Forward pass of the HybridFilterbank.
-        
-        Parameters:
-        -----------
-        x (torch.Tensor) - input tensor of shape (batch_size, 1, signal_length)
-        
-        Returns:
-        --------
-        x (torch.Tensor) - output tensor of shape (batch_size, num_channels, signal_length//hop_length)
-        """
-
         kernel_real = F.conv1d(
             self.aud_kernels_real.to(x.device).squeeze(1),
             self.learned_kernels_real.to(x.device),
@@ -159,16 +153,6 @@ class HybrA(nn.Module):
         return out
     
     def decoder(self, x_real:torch.Tensor, x_imag:torch.Tensor) -> torch.Tensor:
-        """Forward pass of the dual HybridFilterbank.
-
-        Parameters:
-        -----------
-        x (torch.Tensor) - input tensor of shape (batch_size, num_channels, signal_length//hop_length)
-
-        Returns:
-        --------
-        x (torch.Tensor) - output tensor of shape (batch_size, signal_length)
-        """
         L_in = x_real.shape[-1]
         L_out = self.Ls
 
@@ -194,22 +178,26 @@ class HybrA(nn.Module):
         )
 
         return x.squeeze(1)
-
-    @property
-    def condition_number(self, learnable:bool=False):
-        # coefficients = self.hybra_kernels_real.detach().clone().squeeze(1) + 1j* self.hybra_kernels_imag.detach().clone().squeeze(1)
-        kernels = (self.hybra_kernels_real + 1j*self.hybra_kernels_imag).squeeze()
-        #kernels = torch.cat([kernels, torch.conj(kernels)], dim=0)
-        #kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
-        if learnable:
-            return condition_number(kernels, self.stride, self.Ls)
-        else:
-            return condition_number(kernels, self.stride, self.Ls).item()    
-    def plot_response(self):
-        plot_response((self.hybra_kernels_real + 1j*self.hybra_kernels_imag).squeeze().cpu().detach().numpy(), self.fs)
-    def plot_decoder_response(self):
-        plot_response((self.hybra_kernels_real + 1j*self.hybra_kernels_imag).squeeze().cpu().detach().numpy(), self.fs, decoder=True)
+    
+    # plotting methods
+    
     def ISACgram(self, x):
         with torch.no_grad():
             coefficients = torch.log10(torch.abs(self.forward(x)[0]**2))
         ISACgram_(coefficients, self.fc, self.Ls, self.fs)
+
+    def plot_response(self):
+        plot_response((self.hybra_kernels_real + 1j*self.hybra_kernels_imag).squeeze().cpu().detach().numpy(), self.fs)
+
+    def plot_decoder_response(self):
+        plot_response((self.hybra_kernels_real + 1j*self.hybra_kernels_imag).squeeze().cpu().detach().numpy(), self.fs, decoder=True)
+
+    @property
+    def condition_number(self, learnable:bool=False):
+        kernels = (self.hybra_kernels_real + 1j*self.hybra_kernels_imag).squeeze()
+        if learnable:
+            return condition_number(kernels, self.stride, self.Ls)
+        else:
+            return condition_number(kernels, self.stride, self.Ls).item() 
+
+

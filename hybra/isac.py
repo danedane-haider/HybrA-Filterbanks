@@ -4,12 +4,29 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from hybra.utils import audfilters, condition_number, upsample, circ_conv, circ_conv_transpose
+from hybra.utils import audfilters, condition_number, circ_conv, circ_conv_transpose, frame_bounds
 from hybra.utils import plot_response as plot_response_
 from hybra.utils import ISACgram as ISACgram_
 from hybra._fit_dual import fit, tight
 
 class ISAC(nn.Module):
+    """Constructor for an ISAC filterbank.
+    Parameters:
+    -----------
+    kernel_size (int) - size of the kernels of the auditory filterbank
+    num_channels (int) - number of channels
+    fc_max (float) - maximum frequency on the auditory scale. if 'None', it is set to fs//2.
+    stride (int) - stride of the auditory filterbank. if 'None', stride is set to yield 25% overlap
+    fs (int) - sampling frequency
+    L (int) - signal length
+    supp_mult (float) - support multiplier.
+    scale (str) - auditory scale ('mel', 'erb', 'bark', 'log10', 'elelog'). elelog is a scale adapted to the hearing of elephants
+    tighten (bool) - whether to further tighten the filterbank
+    is_encoder_learnable (bool) - whether the encoder kernels are learnable
+    fir_decoder (bool) - computes an approximate perfect reconstruction decoder
+    is_decoder_learnable (bool) - whether the decoder kernels are learnable
+    verbose (bool) - whether to print information about the filterbank
+    """
     def __init__(self,
                  kernel_size:Union[int,None]=128,
                  num_channels:int=40,
@@ -21,30 +38,27 @@ class ISAC(nn.Module):
                  scale:str='mel',
                  tighten=False,
                  is_encoder_learnable=False,
-                 use_decoder=False,
+                 fit_decoder=False,
                  is_decoder_learnable=False,
                  verbose:bool=True):
         super().__init__()
 
-        [kernels, d, fc, fc_min, fc_max, kernel_min, kernel_size, Ls] = audfilters(
+        [aud_kernels, d, fc, fc_min, fc_max, kernel_min, kernel_size, Ls] = audfilters(
             kernel_size=kernel_size, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, supp_mult=supp_mult, scale=scale
         )
 
-        if verbose:
-            print(f"Max kernel size: {kernel_size}")
         if stride is not None:
-            if stride > d:
-                if verbose:
-                    print(f"Warning: stride {stride} is larger than the optimal stride {d}, may affect condition number 🌪️.")
             d = stride
             Ls = int(torch.ceil(torch.tensor(L / d)) * d)
-            if verbose:
-                print(f"Output length: {Ls}")
-        else:
-            if verbose:
+
+        if verbose:
+            print(f"Max kernel size: {kernel_size}")
+            if stride is not None and stride > 0:
+                print(f"Warning: stride {stride} is larger than the optimal stride {d}, may affect condition number 🌪️.\nOutput length: {Ls}")
+            else:
                 print(f"Optimal stride: {d}\nOutput length: {Ls}")
             
-        self.kernels = kernels
+        self.aud_kernels = aud_kernels
         self.kernel_size = kernel_size
         self.kernel_min = kernel_min
         self.fc = fc
@@ -54,85 +68,59 @@ class ISAC(nn.Module):
         self.Ls = Ls
         self.fs = fs
         self.scale = scale
+        self.fit_decoder = fit_decoder
+
+        # optional preprocessing
         
         if tighten:
-            max_iter = 1000
-            fit_eps = 1.01
-            kernels, _ = tight(kernels, d, Ls, fs, fit_eps, max_iter)
+            aud_kernels = tight(aud_kernels, d, Ls, fs, fit_eps = 1.0001, max_iter = 1000)
+        
+        if fit_decoder:
+            decoder_kernels = fit(aud_kernels.clone(), d, Ls, fs, decoder_fit_eps = 1e-4, max_iter = 100)
+        else:
+            decoder_kernels = aud_kernels.clone()
+
+        # set the parameters for the convolutional layers
 
         if is_encoder_learnable:
-            self.register_buffer('kernels_complex', nn.Parameter(kernels, requires_grad=True))
+            self.register_buffer('kernels', nn.Parameter(aud_kernels, requires_grad=True))
         else:
-            self.register_buffer('kernels_complex', kernels)
-        
-        self.use_decoder = use_decoder
-        if use_decoder:
-            max_iter = 1000 # TODO: should we do something like that?
-            decoder_fit_eps = 1e-6
-            decoder_kernels, _, _ = fit(kernels.clone(), d, Ls, fs, decoder_fit_eps, max_iter)
+            self.register_buffer('kernels', aud_kernels)
 
-            if is_decoder_learnable:
-                self.register_buffer('decoder_kernels_complex', nn.Parameter(decoder_kernels, requires_grad=True))
-            else:    
-                self.register_buffer('decoder_kernels_complex', decoder_kernels)
+        if is_decoder_learnable:
+            self.register_buffer('decoder_kernels', nn.Parameter(decoder_kernels, requires_grad=True))
+        else:    
+            self.register_buffer('decoder_kernels', decoder_kernels)
 
     def forward(self, x):
-        """Filterbank analysis.
-        Parameters:
-        -----------
-        x (torch.Tensor) - input tensor of shape (batch_size, signal_length)
-        Returns:
-        --------
-        x (torch.Tensor) - output tensor of shape (batch_size, num_channels, signal_length//hop_length)
-        """
-        x = torch.fft.fft(x, self.Ls, dim=-1) * torch.fft.fft(self.kernels_complex, self.Ls, dim=-1).unsqueeze(0)
-        x = torch.fft.ifft(x, self.Ls, dim=-1)
-        x = x[:, :, ::self.stride]
-        #x = torch.roll(input=x, shifts=-self.kernel_size.item() // 2, dim=-1)
-        return x
+        return circ_conv(x.unsqueeze(1), self.kernels, self.stride)
 
     def decoder(self, x:torch.Tensor) -> torch.Tensor:
-        """Filterbank synthesis.
-
-        Parameters:
-        -----------
-        x (torch.Tensor) - input tensor of shape (batch_size, num_channels, signal_length//hop_length)
-
-        Returns:
-        --------
-        x (torch.Tensor) - output tensor of shape (batch_size, signal_length)
-        """
-
-        x = upsample(x, self.stride)
-        if x.shape[-1] != self.Ls:
-            raise ValueError(f"Coefficients have the wrong length ({x.shape[-1]} instead of {self.Ls}).")
-        x = torch.fft.fft(x, self.Ls, dim=-1) * torch.fft.fft(torch.fliplr(torch.conj(self.decoder_kernels_complex)), self.Ls, dim=-1).unsqueeze(0)
-        x = torch.fft.ifft(x, self.Ls, dim=-1)
-        x = torch.sum(x, dim=0)
-        return x.squeeze(1)
-
-    def plot_response(self):
-        plot_response_(g=(self.kernels_complex).cpu().detach().numpy(), fs=self.fs, scale=self.scale, plot_scale=True, fc_min=self.fc_min, fc_max=self.fc_max, kernel_min=self.kernel_min)
-
-    def plot_decoder_response(self):
-        if self.use_decoder:
-            plot_response_(g=(self.decoder_kernels_complex).detach().cpu().numpy(), fs=self.fs, scale=self.scale, decoder=True)
-        else:
-            raise NotImplementedError("No decoder configured")
+        _, B = frame_bounds(self.decoder_kernels, self.stride, self.Ls)
+        return circ_conv_transpose(x, self.decoder_kernels / B, self.stride).squeeze(1)
+    
+    # plotting methods
 
     def ISACgram(self, x):
         with torch.no_grad():
             coefficients = self.forward(x)
         ISACgram_(coefficients, self.fc, self.Ls, self.fs)
 
+    def plot_response(self):
+        plot_response_(g=(self.kernels).cpu().detach().numpy(), fs=self.fs, scale=self.scale, plot_scale=True, fc_min=self.fc_min, fc_max=self.fc_max, kernel_min=self.kernel_min)
+
+    def plot_decoder_response(self):
+        if self.use_decoder:
+            plot_response_(g=(self.decoder_kernels).detach().cpu().numpy(), fs=self.fs, scale=self.scale, decoder=True)
+        else:
+            raise NotImplementedError("No decoder configured")
+
     @property
     def condition_number(self):
         kernels = (self.kernels).squeeze()
-        #kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
         return condition_number(kernels, int(self.stride), self.Ls)
     
     @property
     def condition_number_decoder(self):
-        kernels = (self.decoder_kernels_complex).squeeze()
-        #kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
+        kernels = (self.decoder_kernels).squeeze()
         return condition_number(kernels, int(self.stride), self.Ls)

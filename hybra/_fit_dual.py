@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import warnings
 
-from hybra.utils import condition_number, alias, upsample
+from hybra.utils import condition_number, alias, upsample, circ_conv, circ_conv_transpose, frame_bounds
 
 class MSETight(nn.Module):
     def __init__(self, beta:float=0.0, fs:int=16000, diag_only:bool=False):
@@ -47,7 +47,7 @@ def noise_uniform(Ls):
     return x.unsqueeze(0)
 
 ############################################################################################################
-# Compute ISAC dual
+# Fit ISAC dual
 ############################################################################################################
 
 class ISACDual(nn.Module):
@@ -59,47 +59,43 @@ class ISACDual(nn.Module):
         self.Ls = Ls
         
         self.register_buffer('kernels', kernels)
-        self.register_parameter('decoder_kernels_complex', nn.Parameter(kernels, requires_grad=True))
+        self.register_parameter('decoder_kernels', nn.Parameter(kernels, requires_grad=True))
+
+        _, B = frame_bounds(kernels, d, Ls)
+        self.B = B
 
 
     def forward(self, x):
-        # analysis
-        kernels_long = F.pad(self.kernels, (0, self.Ls - self.kernels.shape[-1]), mode='constant', value=0)
-        kernels_centered = torch.roll(kernels_long, shifts=-self.kernel_size // 2, dims=-1)
-        x = torch.fft.fft(x, self.Ls, dim=-1) * torch.fft.fft(kernels_centered, self.Ls, dim=-1)
-        x = torch.fft.ifft(x , self.Ls, dim=-1)
-        x = x[:, ::self.stride]
-        # synthesis
-        decoder_kernels_long = F.pad(self.decoder_kernels_complex, (0, self.Ls - self.decoder_kernels_complex.shape[-1]), mode='constant', value=0)
-        decoder_kernels_centered = torch.roll(decoder_kernels_long, shifts=-self.kernel_size // 2, dims=-1)
-        x = upsample(x.squeeze(0), self.stride)
-        x = torch.fft.fft(x, self.Ls, dim=-1) * torch.fft.fft(torch.flip(torch.conj(decoder_kernels_centered), dims=[-1]), self.Ls, dim=-1)
-        x = torch.fft.ifft(x, self.Ls, dim=-1)
-        x = torch.sum(x, dim=0, keepdim=True).real
-        return x
+        _, B = frame_bounds(self.decoder_kernels, self.stride, self.Ls)
+        x = circ_conv(x, self.kernels, self.stride)
+        x = circ_conv_transpose(x, self.decoder_kernels / self.B, self.stride)
+        return x.real
 
 def fit(kernels, d, Ls, fs, decoder_fit_eps, max_iter):
 
     model = ISACDual(kernels, d, Ls)
-    optimizer = optim.Adam(model.parameters(), lr=1e-5)
-    criterion = MSETight(beta=1e-4, fs=fs, diag_only=True)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.0001, momentum=0.9)
+    criterion = MSETight(beta=1e-12, fs=fs, diag_only=True)
 
     losses = []
     kappas = []	
 
     loss_item = float('inf')
     i = 0
-    print("Computing synthesis kernels for ISAC ...⛷️...")
+    print("Computing synthesis kernels for ISAC ⛷️")
     while loss_item >= decoder_fit_eps:
         optimizer.zero_grad()
         x_in = noise_uniform(model.Ls)
         x_out = model(x_in)
         
-        loss, loss_tight, kappa = criterion(x_out, x_in, model.decoder_kernels_complex.squeeze(), d=d, Ls=None)
+        loss, loss_tight, kappa = criterion(x_out, x_in, model.decoder_kernels.squeeze(), d=d, Ls=None)
         loss_tight.backward()
         optimizer.step()
         losses.append(loss.item())
         kappas.append(kappa)
+
+        error = (kappas[-1] - 1.0)**0.01
+        criterion.beta *= error
 
         if i > max_iter:
             print(f"Max. iteration of {max_iter} reached.")
@@ -108,7 +104,7 @@ def fit(kernels, d, Ls, fs, decoder_fit_eps, max_iter):
 
     print(f"Final Stats:\n\tFinal PSD ratio: {kappas[-1]}\n\tBest MSE loss: {losses[-1]}")
     
-    return model.decoder_kernels_complex.detach(), losses, kappas
+    return model.decoder_kernels.detach()
 
 ############################################################################################################
 # Tightening ISAC
@@ -130,7 +126,6 @@ class ISACTight(nn.Module):
     @property
     def condition_number(self):
         kernels = (self.kernels).squeeze()
-        #kernels = F.pad(kernels, (0, self.Ls - kernels.shape[-1]), mode='constant', value=0)
         return condition_number(kernels, int(self.stride), self.Ls)
 
 
@@ -142,20 +137,17 @@ def tight(kernels, d, Ls, fs, fit_eps, max_iter):
 
     print(f"Init Condition number:\n\t{model.condition_number.item()}")
 
-    kappas = []	
-
     loss_item = float('inf')
     i = 0
-    print("Tightening ISAC ...🏂...")
+    print("Tightening ISAC 🏂")
     while loss_item >= fit_eps:
         optimizer.zero_grad()
         model()
         kernels = model.kernels.squeeze()
         
-        kappa, kappa_item = criterion(preds=None, target=None, kernels=kernels, d=d, Ls=None)
+        kappa, _ = criterion(preds=None, target=None, kernels=kernels, d=d, Ls=None)
         kappa.backward()
         optimizer.step()
-        kappas.append(kappa_item)
 
         k = condition_number(kernels, d, Ls).item()
         error = (k - 1.0)**0.01
@@ -170,7 +162,7 @@ def tight(kernels, d, Ls, fs, fit_eps, max_iter):
 
     print(f"Final Condition number:\n\t{model.condition_number.item()}")
     
-    return model.kernels.detach(), kappas
+    return model.kernels.detach()
 
 ############################################################################################################
 # Tightening HybrA

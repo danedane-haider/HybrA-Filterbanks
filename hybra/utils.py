@@ -173,22 +173,37 @@ def fir_tightener3000(w:torch.Tensor, supp:int, d:int, eps:float=1.01, Ls:Union[
         return w_tight[:,:supp]
     
 def upsample(x:torch.Tensor, d:int) -> torch.Tensor:
-    N = x.shape[1]
-    x_up = torch.zeros(x.shape[0], N*d, dtype=x.dtype, device=x.device)
-    x_up[:, ::d] = x
+    N = x.shape[-1]*d
+    x_up = F.pad(torch.zeros_like(x),(0,N-x.shape[-1]))
+    x_up[:, :, ::d] = x
     return x_up
 
-def circ_conv(x_in:torch.Tensor, kernels:torch.Tensor, d:int=1) -> torch.Tensor:
-    K = kernels.shape[1]
-    x = F.pad(x_in, (K-1, 0), mode='circular')
-    x_out = F.conv1d(x, torch.fliplr(torch.conj(kernels)).unsqueeze(1), stride=d)
-    return x_out
+def circ_conv(x: torch.Tensor, kernels: torch.Tensor, d: int = 1) -> torch.Tensor:
+    L = x.shape[-1]
+    x = x.to(kernels.dtype)
+    x_fft = torch.fft.fft(x, n=L, dim=-1)             # (B, Ls)
+    k_fft = torch.fft.fft(kernels, n=L, dim=-1)         # (C, Ls)
+    y_fft = x_fft * k_fft
+    y = torch.fft.ifft(y_fft)                    # (B, C, Ls)
+    return y[:, :, ::d]  
 
-def circ_conv_transpose(y_in:torch.Tensor, kernels:torch.Tensor, d:int=1) -> torch.Tensor:
-    K = kernels.shape[1]
-    L = y_in.shape[1]
-    y_out = F.conv1d(F.pad(upsample(y_in,d), (0, K), mode='circular'), kernels.unsqueeze(0), stride=1)
-    return y_out[:, :-1].real
+def circ_conv_transpose(y: torch.Tensor, kernels: torch.Tensor, d: int = 1) -> torch.Tensor:
+    L = y.shape[-1] * d
+    y_up = upsample(y, d)
+
+    kernels_long = F.pad(kernels, (0, L - kernels.shape[-1]), mode='constant', value=0)
+    kernels_long = torch.flip(torch.conj(kernels_long), dims=(1,))
+
+    y_fft = torch.fft.fft(y_up, n=L, dim=-1)                  # (B, C, Ls)
+    k_fft = torch.fft.fft(kernels_long, n=L, dim=-1)               # (C, Ls)
+
+    x_fft = y_fft * k_fft              # (B, C, Ls)
+    x = torch.fft.ifft(x_fft, dim=-1)               # (B, C, Ls)
+
+    x = torch.sum(x, dim=-2, keepdim=True)  # Sum over channels
+
+    # Remove final sample to match conv1d transpose
+    return torch.roll(x, 1, -1)
 
 ####################################################################################################
 ################### Routines for constructing auditory filterbanks #################################
@@ -670,7 +685,7 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
     # Generate filters
     ####################################################################################################
 
-    g = torch.zeros((num_channels, kernel_size), dtype=torch.complex64)
+    g = torch.zeros((num_channels, kernel_size), dtype=torch.cfloat)
 
     g[0,:] = torch.sqrt(d) * firwin(kernel_size) / torch.sqrt(torch.tensor(2))
     g[-1,:] = torch.sqrt(d) * modulate(firwin(tsupp[-1], kernel_size), fs//2, fs) / torch.sqrt(torch.tensor(2))
@@ -812,6 +827,8 @@ def ISACgram(coefficients, fc, L, fs, fc_max=None, log_scale=False, vmin=None, c
 
     if fc_max is not None:
         c = c[:np.argmax(fc > fc_max), :]
+    
+    c = np.roll(c, -L//4, axis=-1)  # Center frequencies around zero
 
     if vmin is not None:
         mesh = ax.pcolor(c, cmap=cmap, vmin=np.min(c)*vmin)
