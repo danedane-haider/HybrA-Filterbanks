@@ -30,7 +30,7 @@ jobs:
           source .venv/bin/activate
           mkdir html
           git fetch --all
-          sphinx_multiversion docs html
+          sphinx-multiversion docs html
           cp docs/assets/index.html html/index.html
 
       - name: Upload GitHub Pages artifact
