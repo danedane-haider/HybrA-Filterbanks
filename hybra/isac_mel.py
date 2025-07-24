@@ -13,7 +13,7 @@ class ISACMelSpectrogram(nn.Module):
                  kernel_size:Union[int,None]=None,
                  num_channels:int=40,
                  fc_max:Union[float,int,None]=None,
-                 stride:int=None,
+                 stride:Union[int,None]=None,
                  fs:int=16000, 
                  L:int=16000,
                  bw_multiplier:float=1,
