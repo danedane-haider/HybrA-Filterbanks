@@ -697,6 +697,9 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
     for m in range(1, num_channels - 1):
         g[m,:] = torch.sqrt(d) * modulate(firwin(tsupp[m], kernel_size), fc[m], fs)
 
+    _, B = frame_bounds(g, d, Ls)
+    g = g / B
+
     return g, int(d), fc, fc_min, fc_max, kernel_min, kernel_size, Ls
 
 ####################################################################################################
