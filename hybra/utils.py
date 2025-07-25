@@ -9,7 +9,7 @@ from typing import Union, Tuple
 ##################### Cool routines to study decimated filterbanks #################################
 ####################################################################################################
 
-def frame_bounds(w:torch.Tensor, d:int, Ls:int=None) -> Tuple[torch.Tensor, torch.Tensor]:
+def frame_bounds(w:torch.Tensor, d:int, Ls:Union[int,None]=None) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Computes the frame bounds of a filterbank given in impulse responses using the polyphase representation.
     Parameters:
@@ -54,7 +54,7 @@ def frame_bounds(w:torch.Tensor, d:int, Ls:int=None) -> Tuple[torch.Tensor, torc
             B = torch.max(B, torch.max(lam))
         return (A/d).to(w_hat.device), (B/d).to(w_hat.device)
 
-def condition_number(w:torch.Tensor, d:int, Ls:int=None) -> torch.Tensor:
+def condition_number(w:torch.Tensor, d:int, Ls:Union[int,None]=None) -> torch.Tensor:
     """
     Computes the condition number of a filterbank.
     Parameters:
@@ -67,7 +67,7 @@ def condition_number(w:torch.Tensor, d:int, Ls:int=None) -> torch.Tensor:
     A = torch.max(A, torch.tensor(1e-6, dtype=A.dtype, device=A.device))  # Avoid division by zero
     return B / A
 
-def frequency_correlation(w: torch.Tensor, d: int, Ls: int = None, diag_only: bool = False) -> torch.Tensor:
+def frequency_correlation(w: torch.Tensor, d: int, Ls:Union[int,None] = None, diag_only: bool = False) -> torch.Tensor:
     """
     Computes the frequency correlation functions (vectorized version).
     Parameters:
@@ -213,7 +213,7 @@ def circ_conv_transpose(y: torch.Tensor, kernels: torch.Tensor, d: int = 1) -> t
 ################### Routines for constructing auditory filterbanks #################################
 ####################################################################################################
 
-def freqtoaud(freq:Union[float,int,torch.Tensor], scale:str="erb", fs:int=None):
+def freqtoaud(freq:Union[float,int,torch.Tensor], scale:str="erb", fs:Union[int,None]=None):
     """
     Converts frequencies (Hz) to auditory scale units.
 
@@ -262,7 +262,7 @@ def freqtoaud(freq:Union[float,int,torch.Tensor], scale:str="erb", fs:int=None):
     else:
         raise ValueError(f"Unsupported scale: '{scale}'. Available options are: 'mel', 'erb', 'bark', 'log10', 'elelog'.")
 
-def audtofreq(aud:Union[float,int,torch.Tensor], scale:str="erb", fs:int=None):
+def audtofreq(aud:Union[float,int,torch.Tensor], scale:str="erb", fs:Union[int,None]=None):
     if scale == "erb":
         return (1 / 0.00437) * (torch.exp(aud / 9.2645) - 1)
 
