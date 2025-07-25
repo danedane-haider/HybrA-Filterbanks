@@ -11,21 +11,22 @@ from hybra._fit_dual import fit, tight
 
 class ISAC(nn.Module):
     """Constructor for an ISAC filterbank.
+    
     Parameters:
     -----------
-    kernel_size (int) - size of the kernels of the auditory filterbank
-    num_channels (int) - number of channels
-    fc_max (float) - maximum frequency on the auditory scale. if 'None', it is set to fs//2.
-    stride (int) - stride of the auditory filterbank. if 'None', stride is set to yield 25% overlap
-    fs (int) - sampling frequency
-    L (int) - signal length
-    supp_mult (float) - support multiplier.
-    scale (str) - auditory scale ('mel', 'erb', 'bark', 'log10', 'elelog'). elelog is a scale adapted to the hearing of elephants
-    tighten (bool) - whether to further tighten the filterbank
-    is_encoder_learnable (bool) - whether the encoder kernels are learnable
-    fir_decoder (bool) - computes an approximate perfect reconstruction decoder
-    is_decoder_learnable (bool) - whether the decoder kernels are learnable
-    verbose (bool) - whether to print information about the filterbank
+        kernel_size (int) - size of the kernels of the auditory filterbank
+        num_channels (int) - number of channels
+        fc_max (float) - maximum frequency on the auditory scale. if 'None', it is set to fs//2.
+        stride (int) - stride of the auditory filterbank. if 'None', stride is set to yield 25% overlap
+        fs (int) - sampling frequency
+        L (int) - signal length
+        supp_mult (float) - support multiplier.
+        scale (str) - auditory scale ('mel', 'erb', 'bark', 'log10', 'elelog'). elelog is a scale adapted to the hearing of elephants
+        tighten (bool) - whether to further tighten the filterbank
+        is_encoder_learnable (bool) - whether the encoder kernels are learnable
+        fir_decoder (bool) - computes an approximate perfect reconstruction decoder
+        is_decoder_learnable (bool) - whether the decoder kernels are learnable
+        verbose (bool) - whether to print information about the filterbank
     """
     def __init__(self,
                  kernel_size:Union[int,None]=128,

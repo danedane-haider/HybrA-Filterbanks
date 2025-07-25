@@ -24,17 +24,17 @@ class HybrA(nn.Module):
 
         Parameters:
         -----------
-        kernel_size (int) - kernel size of the auditory filterbank
-        learned_kernel_size (int) - kernel size of the learned filterbank
-        num_channels (int) - number of channels
-        stride (int) - stride of the auditory filterbank. if 'None': 25% overlap
-        fc_max (float) - maximum frequency on the auditory scale. if 'None': fs//2.
-        fs (int) - sampling frequency
-        L (int) - signal length
-        supp_mult (float) - support multiplier. 
-        scale (str) - auditory scale ('mel', 'erb', 'bark', 'log10', 'elelog'). elelog is a scale adapted to the hearing of elephants. Default: 'mel'.
-        tighten (bool) - whether to tighten the hybrid filterbank. Default: False.
-        det_init (bool) - whether to initialize the learned filters with diracs or randomly. Default: False.
+            kernel_size (int) - kernel size of the auditory filterbank
+            learned_kernel_size (int) - kernel size of the learned filterbank
+            num_channels (int) - number of channels
+            stride (int) - stride of the auditory filterbank. if 'None': 25% overlap
+            fc_max (float) - maximum frequency on the auditory scale. if 'None': fs//2.
+            fs (int) - sampling frequency
+            L (int) - signal length
+            supp_mult (float) - support multiplier. 
+            scale (str) - auditory scale ('mel', 'erb', 'bark', 'log10', 'elelog'). elelog is a scale adapted to the hearing of elephants. Default: 'mel'.
+            tighten (bool) - whether to tighten the hybrid filterbank. Default: False.
+            det_init (bool) - whether to initialize the learned filters with diracs or randomly. Default: False.
         """
         
         super().__init__()
