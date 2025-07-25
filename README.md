@@ -18,7 +18,7 @@ Construct an ISAC and HybrA filterbank, and plot the filter frequency responses.
 import torchaudio
 from hybra import ISAC, HybrA, ISACgram
 
-x, fs = torchaudio.load("audio.wav")
+x, fs = torchaudio.load("your_audio.wav")
 x = torch.tensor(x, dtype=torch.float32).unsqueeze(0)
 L = x.shape[-1]
 
@@ -52,12 +52,8 @@ ISACgram(y)
 
 <img src="https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/plots/HybrA_coeff.png?raw=true" width="100%">
 
-```python
-y = hybra_filterbank(x)
-ISACgram(y)
-```
 
-It is also straightforward to include them in your model, e.g., as an encoder/decoder pair.
+It is also straightforward to include them in any model, e.g., as an encoder/decoder pair.
 ```python
 import torch
 import torch.nn as nn
