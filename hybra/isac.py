@@ -11,7 +11,7 @@ from hybra._fit_dual import fit, tight
 
 class ISAC(nn.Module):
     """Constructor for an ISAC filterbank.
-    
+
     Parameters:
     -----------
         kernel_size (int) - size of the kernels of the auditory filterbank
@@ -53,11 +53,11 @@ class ISAC(nn.Module):
             Ls = int(torch.ceil(torch.tensor(L / d)) * d)
 
         if verbose:
-            print(f"Max kernel size: {kernel_size}")
-            if stride is not None and stride > 0:
-                print(f"Warning: stride {stride} is larger than the optimal stride {d}, may affect condition number 🌪️.\nOutput length: {Ls}")
-            else:
-                print(f"Optimal stride: {d}\nOutput length: {Ls}")
+            print(f"Max. kernel size: {kernel_size}")
+            print(f"Min. kernel size: {kernel_min}")
+            print(f"Number of channels: {num_channels}")
+            print(f"Stride for min. 25% overlap: {d}")
+            print(f"Signal length: {Ls}")
             
         self.aud_kernels = aud_kernels
         self.kernel_size = kernel_size

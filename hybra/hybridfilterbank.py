@@ -39,7 +39,7 @@ class HybrA(nn.Module):
         
         super().__init__()
 
-        [aud_kernels, d, fc, _, _, _, kernel_size, Ls] = audfilters(
+        [aud_kernels, d, fc, _, fc_max, kernel_min, kernel_size, Ls] = audfilters(
             kernel_size=kernel_size, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, supp_mult=supp_mult, scale=scale
         )
 
@@ -48,11 +48,11 @@ class HybrA(nn.Module):
             Ls = int(torch.ceil(torch.tensor(L / d)) * d)
 
         if verbose:
-            print(f"Max kernel size: {kernel_size}")
-            if stride is not None and stride > 0:
-                print(f"Warning: stride {stride} is larger than the optimal stride {d}, may affect condition number 🌪️.\nOutput length: {Ls}")
-            else:
-                print(f"Optimal stride: {d}\nOutput length: {Ls}")
+            print(f"Max. kernel size: {kernel_size}")
+            print(f"Min. kernel size: {kernel_min}")
+            print(f"Number of channels: {num_channels}")
+            print(f"Stride for min. 25% overlap: {d}")
+            print(f"Signal length: {Ls}")
 
         self.register_buffer('kernels', aud_kernels)
         self.kernel_size = kernel_size

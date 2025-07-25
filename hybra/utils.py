@@ -715,7 +715,7 @@ def response(g, fs):
 
     return G
 
-def plot_response(g, fs, scale='erb', plot_scale=False, fc_min=None, fc_max=None, kernel_min=None, decoder=False):
+def plot_response(g, fs, scale='mel', plot_scale=False, fc_min=None, fc_max=None, kernel_min=None, decoder=False):
     """Plotting routine for the frequencs scale and the frequency responses of the filters.
     
     Args:
@@ -743,17 +743,19 @@ def plot_response(g, fs, scale='erb', plot_scale=False, fc_min=None, fc_max=None
         freqs = torch.linspace(0, fs//2, fs//2)
 
         auds = freqtoaud_mod(freqs, fc_min, fc_max, scale, fs).numpy()
+        auds_orig = freqtoaud(freqs, scale, fs).numpy()
 
-        plt.scatter(freq_samples.numpy(), freqtoaud_mod(freq_samples, fc_min, fc_max, scale, fs).numpy(), color="black", label="Center frequencies", linewidths = 0.05)
-        plt.plot(freqs, auds, color='black')
+        plt.scatter(freq_samples.numpy(), freqtoaud_mod(freq_samples, fc_min, fc_max, scale, fs).numpy(), color="black", label="Center frequencies", linewidths = 0.04)
+        plt.plot(freqs, auds, color='black', label=f"ISAC {scale}-scale")
+        plt.plot(freqs, auds_orig, color='black', linestyle='--', alpha=0.5, label=f"Original {scale}-scale")
 
         if fc_min is not None:
-            plt.axvline(fc_min, color='black', linestyle='--', label="Transition: lin - aud", alpha=0.5)
+            plt.axvline(fc_min, color='black', alpha=0.25)
             plt.fill_betweenx(y=[auds[0]-1, auds[-1]*1.1], x1=0, x2=fc_min, color='gray', alpha=0.25)
             plt.fill_betweenx(y=[auds[0]-1, auds[-1]*1.1], x1=fc_min, x2=fs//2, color='gray', alpha=0.1)
 
         if fc_max is not None:
-            plt.axvline(fc_max, color='black', linestyle='--', label="Transition: aud - lin", alpha=0.5)
+            plt.axvline(fc_max, color='black', alpha=0.25)
             plt.fill_betweenx(y=[auds[0]-1, auds[-1]*1.1], x1=0, x2=fc_max, color='gray', alpha=0.25)
             plt.fill_betweenx(y=[auds[0]-1, auds[-1]*1.1], x1=fc_max, x2=fs//2, color='gray', alpha=0.1)
 
@@ -764,7 +766,8 @@ def plot_response(g, fs, scale='erb', plot_scale=False, fc_min=None, fc_max=None
         # text_y = auds[-1] 
         # plt.text(text_x, text_y, 'linear', color='black', ha='center', va='center', fontsize=12, alpha=0.75)
         # plt.text(text_x + fc_min - 1, text_y, 'ERB', color='black', ha='center', va='center', fontsize=12, alpha=0.75)
-        plt.title(f"ISAC Scale for {num_channels} channels. Max kernel size: {kernel_size}, Min kernel size: {kernel_min}")
+        #plt.title(f"ISAC {scale}-scale")
+
         plt.ylabel("Auditory Units")
         plt.legend(loc='lower right')
         plt.tight_layout()
@@ -808,7 +811,7 @@ def plot_response(g, fs, scale='erb', plot_scale=False, fc_min=None, fc_max=None
     plt.tight_layout()
     plt.show()
 
-def ISACgram(coefficients, fc, L, fs, fc_max=None, log_scale=False, vmin=None, cmap='inferno'):
+def ISACgram(coefficients, fc=None, L=None, fs=None, fc_max=None, log_scale=True, vmin=None, cmap='inferno'):
     """Plot the ISAC coefficients with optional log scaling and colorbar.
 
     Args:
@@ -829,7 +832,7 @@ def ISACgram(coefficients, fc, L, fs, fc_max=None, log_scale=False, vmin=None, c
     else:
         c = np.abs(c)
 
-    if fc_max is not None:
+    if fc is not None and fc_max is not None:
         c = c[:np.argmax(fc > fc_max), :]
 
     if vmin is not None:
@@ -841,18 +844,22 @@ def ISACgram(coefficients, fc, L, fs, fc_max=None, log_scale=False, vmin=None, c
     fig.colorbar(mesh, ax=ax)
 
     # Y-axis: frequencies
-    locs = np.linspace(0, c.shape[0]-1, min(len(fc), 10)).astype(int)
-    ax.set_yticks(locs)
-    ax.set_yticklabels([int(np.round(fc[i])) for i in locs])
+    if fc is not None:
+        locs = np.linspace(0, c.shape[0]-1, min(len(fc), 10)).astype(int)
+        ax.set_yticks(locs)
+        ax.set_yticklabels([int(np.round(fc[i])) for i in locs])
 
-    # X-axis: time
-    num_time_labels = 10
-    xticks = np.linspace(0, c.shape[1]-1, num_time_labels)
-    ax.set_xticks(xticks)
-    ax.set_xticklabels([np.round(x, 1) for x in np.linspace(0, L/fs, num_time_labels)])
+        # X-axis: time
+        num_time_labels = 10
+        xticks = np.linspace(0, c.shape[1]-1, num_time_labels)
+        ax.set_xticks(xticks)
+        ax.set_xticklabels([np.round(x, 1) for x in np.linspace(0, L/fs, num_time_labels)])
 
-    ax.set_title('Filterbank Coefficients')
-    ax.set_ylabel('Frequency [Hz]')
-    ax.set_xlabel('Time [s]')
+        ax.set_ylabel('Frequency [Hz]')
+        ax.set_xlabel('Time [s]')
+    else:
+        ax.set_ylabel('Frequency Index')
+        ax.set_xlabel('Time Index')
+
     plt.tight_layout()
     plt.show()

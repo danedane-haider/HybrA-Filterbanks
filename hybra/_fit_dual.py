@@ -133,7 +133,7 @@ class ISACTight(nn.Module):
 def tight(kernels, d, Ls, fs, fit_eps, max_iter):
 
     model = ISACTight(kernels, d, Ls)
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.0001)
     criterion = MSETight(beta=1, fs=fs, diag_only=False)
 
     print(f"Init Condition number:\n\t{model.condition_number.item():.4f}")
