@@ -29,7 +29,7 @@ y = hybra_filterbank(x)
 hybra_filterbank.plot_response()
 ```
 
-It is also straightforward to include the filterbank in a model
+It is also straightforward to include the filterbank in a model, e.g. as a encoder/decoder pair.
 ```python
 import torch
 import torch.nn as nn
