@@ -1,7 +1,7 @@
 ![Logo](https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/HybrA.png)
 
 ## About
-This repository contains the official implementaions of [Hybrid Auditory filterbanks](https://arxiv.org/abs/2408.17358) and [ISAC](https://arxiv.org/abs/2505.07709). The modules are designed to be easily usable in the design of PyTorch model designs.
+This repository contains the official implementations of [HybrA](https://arxiv.org/abs/2408.17358) and [ISAC](https://arxiv.org/abs/2505.07709). ISAC is an invertible and stable auditory filterbank with customizable kernel size, and HybrA extends ISAC via an additional set of learnable kernels. The two filterbanks are implemented as PyTorch nn.Module and therefore easily integrable into any neural network. As an essential mathematical foundation for the construction of ISAC and HybrA, the repository contains many fast frame-theoretic functions, such as the computation of framebounds, aliasing terms, and regularizers for tightening. 
 
 ## Documentation
 [https://github.com/danedane-haider/HybrA-Filterbanks](https://danedane-haider.github.io/HybrA-Filterbanks/main/)
@@ -13,23 +13,36 @@ pip install hybra
 ```
 
 ## Usage
-This package offers several PyTorch modules to be used in your code performing transformations of an input signal into a time frequency representation.
+Construct an ISAC and HybrA filterbank, and plot the filter frequency responses. Transform an input audio signal into the corresponding learnable time-frequency representation, and plot it.
 ```python
 import torchaudio
-from hybra import HybrA, ISAC
+from hybra import ISAC, HybrA, ISACgram
 
 x, fs = torchaudio.load("audio.wav")
+x = torch.tensor(x, dtype=torch.float32).unsqueeze(0)
+L = x.shape[-1]
 
-isac_filterbank = ISAC(fs=fs)
-y = isac_filterbank(x)
+isac_filterbank = ISAC(kernel_size=1024, num_channels=128, L=L, fs=fs)
 isac_filterbank.plot_response()
-
-hybra_filterbank = HybrA(fs=fs)
-y = hybra_filterbank(x)
-hybra_filterbank.plot_response()
 ```
 
-It is also straightforward to include the filterbank in a model, e.g. as a encoder/decoder pair.
+![Logo](https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/HybrA.png)
+
+```python
+y = isac_filterbank(x)
+ISACgram(y)
+```
+
+
+```python
+
+hybra_filterbank = HybrA(fs=fs)
+hybra_filterbank.plot_response()
+y = hybra_filterbank(x)
+ISACgram(y)
+```
+
+It is also straightforward to include them in your model, e.g. as a encoder/decoder pair.
 ```python
 import torch
 import torch.nn as nn
@@ -86,20 +99,20 @@ if __name__ == '__main__':
 
 ## Citation
 
-If you find our work valuable, please cite
+If you find our work valuable and use HybrA or ISAC in your own work, please cite
 
 ```
-@article{HaiderTight2024,
-  title={Hold me Tight: Trainable and stable hybrid auditory filterbanks for speech enhancement},
-  author={Haider, Daniel and Perfler, Felix and Lostanlen, Vincent and Ehler, Martin and Balazs, Peter},
-  journal={arXiv preprint arXiv:2408.17358},
-  year={2024}
+@inproceedings{haider2024holdmetight,
+  author = {Haider, Daniel and Perfler, Felix and Lostanlen, Vincent and Ehler, Martin and Balazs, Peter},
+  booktitle = {Annual Conference of the International Speech Communication Association (Interspeech)},
+  year = {2024},
+  title = {Hold me tight: Stable encoder/decoder design for speech enhancement},
 }
-@article{HaiderISAC2025,
-      title={ISAC: An Invertible and Stable Auditory Filter Bank with Customizable Kernels for ML Integration}, 
-      author={Daniel Haider and Felix Perfler and Peter Balazs and Clara Hollomey and Nicki Holighaus},
-      year={2025},
-      url={arXiv preprint arXiv:2505.07709}, 
-
+@inproceedings{haider2025isac,
+  author = {Haider, Daniel and Perfler, Felix and Balazs, Peter and Hollomey, Clara and Holighaus, Nicki},
+  title = {{ISAC}: An Invertible and Stable Auditory Filter
+  Bank with Customizable Kernels for ML Integration},
+  booktitle = {International Conference on Sampling Theory and Applications (SampTA)},
+  year = {2025}
 }
 ```
