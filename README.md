@@ -22,32 +22,32 @@ x, fs = torchaudio.load("your_audio.wav")
 x = torch.tensor(x, dtype=torch.float32).unsqueeze(0)
 L = x.shape[-1]
 
-isac_filterbank = ISAC(kernel_size=1024, num_channels=128, L=L, fs=fs)
-isac_filterbank.plot_response()
+isac_fb = ISAC(kernel_size=1024, num_channels=128, L=L, fs=fs)
+isac_fb.plot_response()
 ```
-
+Condition number: 1.01
 <img src="https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/plots/ISAC_response.png?raw=true" width="100%">
 
 ```python
-y = isac_filterbank(x)
-x_tilde = isac_filterbank.decoder(y)
-ISACgram(y)
+y = isac_fb(x)
+x_tilde = isac_fb.decoder(y)
+ISACgram(y, isac_fb.fc, L=L, fs=fs)
 ```
 
 <img src="https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/plots/ISAC_coeff.png?raw=true" width="100%">
 
 ```python
 
-hybra_filterbank = HybrA(kernel_size=1024, learned_kernel_size=23, num_channels=128, L=L, fs=fs, tighten=True)
-hybra_filterbank.plot_response()
+hybra_fb = HybrA(kernel_size=1024, num_channels=128, L=L, fs=fs, tighten=True)
+hybra_fb.plot_response()
 ```
-
+Condition number: 1.06
 <img src="https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/plots/HybrA_response.png?raw=true" width="100%">
 
 ```python
-y = hybra_filterbank(x)
-x_tilde = hybra_filterbank.decoder(y)
-ISACgram(y)
+y = hybra_fb(x)
+x_tilde = hybra_fb.decoder(y)
+ISACgram(y, hybra_fb.fc, L=L, fs=fs)
 ```
 
 <img src="https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/plots/HybrA_coeff.png?raw=true" width="100%">
@@ -95,15 +95,15 @@ class HybridfilterbankModel(nn.Module):
         super().__init__()
 
         self.nsnet = Net()
-        self.filterbank = HybrA()
+        self.fb = HybrA()
 
     def forward(self, x):
-        x = self.filterbank(x)
+        x = self.fb(x)
         mask = self.nsnet(torch.log10(torch.max(x.abs()**2, 1e-8 * torch.ones_like(x, dtype=torch.float32))))
-        return self.filterbank.decoder(x*mask)
+        return self.fb.decoder(x*mask)
 
 if __name__ == '__main__':
-    audio, fs = torchaudio.load('audio.wav') 
+    audio, fs = torchaudio.load('your_audio.wav') 
     model = HybridfilterbankModel()
     model(audio)
 ```
