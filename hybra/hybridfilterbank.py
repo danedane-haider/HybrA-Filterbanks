@@ -22,8 +22,7 @@ class HybrA(nn.Module):
                  verbose:bool=True):
         """Constructor for a HybrA filterbank.
 
-        Parameters:
-        -----------
+        Args:
             kernel_size (int) - kernel size of the auditory filterbank
             learned_kernel_size (int) - kernel size of the learned filterbank
             num_channels (int) - number of channels

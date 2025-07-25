@@ -12,8 +12,7 @@ from hybra._fit_dual import fit, tight
 class ISAC(nn.Module):
     """Constructor for an ISAC filterbank.
 
-    Parameters:
-    -----------
+    Args:
         kernel_size (int) - size of the kernels of the auditory filterbank
         num_channels (int) - number of channels
         fc_max (float) - maximum frequency on the auditory scale. if 'None', it is set to fs//2.
