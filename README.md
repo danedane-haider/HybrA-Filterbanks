@@ -38,7 +38,7 @@ ISACgram(y, isac_fb.fc, L=L, fs=fs)
 
 ```python
 
-hybra_fb = HybrA(kernel_size=1024, num_channels=128, L=L, fs=fs, tighten=True)
+hybra_fb = HybrA(kernel_size=1024, learned_kernel_size=23, num_channels=128, L=L, fs=fs, tighten=True)
 hybra_fb.plot_response()
 ```
 Condition number: 1.06
