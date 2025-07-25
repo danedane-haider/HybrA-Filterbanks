@@ -199,10 +199,10 @@ def circ_conv_transpose(y: torch.Tensor, kernels: torch.Tensor, d: int = 1) -> t
 
     kernels_long = F.pad(kernels, (0, L - kernels.shape[-1]), mode='constant', value=0)
     kernels_centered = torch.roll(kernels_long, shifts=-kernels.shape[-1] // 2, dims=-1)
-    kernels_centered = torch.flip(torch.conj(kernels_centered), dims=(1,))
+    kernels_synth = torch.flip(torch.conj(kernels_centered), dims=(1,))
 
     y_fft = torch.fft.fft(y_up, n=L, dim=-1)         
-    k_fft = torch.fft.fft(kernels_centered, n=L, dim=-1)    
+    k_fft = torch.fft.fft(kernels_synth, n=L, dim=-1)    
     x_fft = y_fft * k_fft          
     x = torch.fft.ifft(x_fft, dim=-1)     
     x = torch.sum(x, dim=-2, keepdim=True) 
