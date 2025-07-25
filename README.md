@@ -18,8 +18,7 @@ This package offers several PyTorch modules to be used in your code performing t
 import torchaudio
 from hybra import HybrA, ISAC
 
-x, fs = torchaudio.load("/Users/felixperfler/Downloads/sweep.wav")
-x = x.unsqueeze(0)
+x, fs = torchaudio.load("audio.wav")
 
 isac_filterbank = ISAC(fs=fs)
 y = isac_filterbank(x)
@@ -28,6 +27,61 @@ isac_filterbank.plot_response()
 hybra_filterbank = HybrA(fs=fs)
 y = hybra_filterbank(x)
 hybra_filterbank.plot_response()
+```
+
+It is also straightforward to include the filterbank in a model
+```python
+import torch
+import torch.nn as nn
+import torchaudio
+from hybra import HybrA
+
+class Net(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.linear_before = nn.Linear(40, 400)
+
+        self.gru = nn.GRU(
+            input_size=400,
+            hidden_size=400,
+            num_layers=2,
+            batch_first=True,
+        )
+
+        self.linear_after = nn.Linear(400, 600)
+        self.linear_after2 = nn.Linear(600, 600)
+        self.linear_after3 = nn.Linear(600, 40)
+
+
+    def forward(self, x):
+
+        x = x.permute(0, 2, 1)
+        x = torch.relu(self.linear_before(x))
+        x, _ = self.gru(x)
+        x = torch.relu(self.linear_after(x))
+        x = torch.relu(self.linear_after2(x))
+        x = torch.sigmoid(self.linear_after3(x))
+        x = x.permute(0, 2, 1)
+
+        return x
+
+class HybridfilterbankModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.nsnet = Net()
+        self.filterbank = HybrA()
+
+    def forward(self, x):
+        x = self.filterbank(x)
+        mask = self.nsnet(torch.log10(torch.max(x.abs()**2, 1e-8 * torch.ones_like(x, dtype=torch.float32))))
+        return self.filterbank.decoder(x*mask)
+
+if __name__ == '__main__':
+    audio, fs = torchaudio.load('audio.wav') 
+    model = HybridfilterbankModel()
+    model(audio)
 ```
 
 ## Citation
