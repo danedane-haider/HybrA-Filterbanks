@@ -26,23 +26,38 @@ isac_filterbank = ISAC(kernel_size=1024, num_channels=128, L=L, fs=fs)
 isac_filterbank.plot_response()
 ```
 
-![Logo](https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/HybrA.png)
+<img src="https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/plots/ISAC_response.png?raw=true" width="100%">
 
 ```python
 y = isac_filterbank(x)
+x_tilde = isac_filterbank.decoder(y)
 ISACgram(y)
 ```
 
+<img src="https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/plots/ISAC_coeff.png?raw=true" width="100%">
 
 ```python
 
-hybra_filterbank = HybrA(fs=fs)
+hybra_filterbank = HybrA(kernel_size=1024, learned_kernel_size=23, num_channels=128, L=L, fs=fs, tighten=True)
 hybra_filterbank.plot_response()
+```
+
+<img src="https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/plots/HybrA_response.png?raw=true" width="100%">
+
+```python
+y = hybra_filterbank(x)
+x_tilde = hybra_filterbank.decoder(y)
+ISACgram(y)
+```
+
+<img src="https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/plots/HybrA_coeff.png?raw=true" width="100%">
+
+```python
 y = hybra_filterbank(x)
 ISACgram(y)
 ```
 
-It is also straightforward to include them in your model, e.g. as a encoder/decoder pair.
+It is also straightforward to include them in your model, e.g., as an encoder/decoder pair.
 ```python
 import torch
 import torch.nn as nn
@@ -99,7 +114,7 @@ if __name__ == '__main__':
 
 ## Citation
 
-If you find our work valuable and use HybrA or ISAC in your own work, please cite
+If you find our work valuable and use HybrA or ISAC in your work, please cite
 
 ```
 @inproceedings{haider2024holdmetight,
