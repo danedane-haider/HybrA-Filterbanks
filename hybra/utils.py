@@ -64,6 +64,7 @@ def condition_number(w:torch.Tensor, d:int, Ls:int=None) -> torch.Tensor:
         kappa: Condition number
     """
     A, B = frame_bounds(w, d, Ls)
+    A = torch.max(A, torch.tensor(1e-6, dtype=A.dtype, device=A.device))  # Avoid division by zero
     return B / A
 
 def frequency_correlation(w: torch.Tensor, d: int, Ls: int = None, diag_only: bool = False) -> torch.Tensor:
@@ -181,10 +182,15 @@ def upsample(x:torch.Tensor, d:int) -> torch.Tensor:
 def circ_conv(x: torch.Tensor, kernels: torch.Tensor, d: int = 1) -> torch.Tensor:
     L = x.shape[-1]
     x = x.to(kernels.dtype)
-    x_fft = torch.fft.fft(x, n=L, dim=-1)             # (B, Ls)
-    k_fft = torch.fft.fft(kernels, n=L, dim=-1)         # (C, Ls)
+
+    kernels_long = F.pad(kernels, (0, L - kernels.shape[-1]), mode='constant', value=0)
+    kernels_centered = torch.roll(kernels_long, shifts=-kernels.shape[-1] // 2, dims=-1)
+
+    x_fft = torch.fft.fft(x, n=L, dim=-1)  
+    k_fft = torch.fft.fft(kernels_centered, n=L, dim=-1)
     y_fft = x_fft * k_fft
-    y = torch.fft.ifft(y_fft)                    # (B, C, Ls)
+    y = torch.fft.ifft(y_fft) 
+    
     return y[:, :, ::d]  
 
 def circ_conv_transpose(y: torch.Tensor, kernels: torch.Tensor, d: int = 1) -> torch.Tensor:
@@ -192,17 +198,15 @@ def circ_conv_transpose(y: torch.Tensor, kernels: torch.Tensor, d: int = 1) -> t
     y_up = upsample(y, d)
 
     kernels_long = F.pad(kernels, (0, L - kernels.shape[-1]), mode='constant', value=0)
-    kernels_long = torch.flip(torch.conj(kernels_long), dims=(1,))
+    kernels_centered = torch.roll(kernels_long, shifts=-kernels.shape[-1] // 2, dims=-1)
+    kernels_centered = torch.flip(torch.conj(kernels_centered), dims=(1,))
 
-    y_fft = torch.fft.fft(y_up, n=L, dim=-1)                  # (B, C, Ls)
-    k_fft = torch.fft.fft(kernels_long, n=L, dim=-1)               # (C, Ls)
+    y_fft = torch.fft.fft(y_up, n=L, dim=-1)         
+    k_fft = torch.fft.fft(kernels_centered, n=L, dim=-1)    
+    x_fft = y_fft * k_fft          
+    x = torch.fft.ifft(x_fft, dim=-1)     
+    x = torch.sum(x, dim=-2, keepdim=True) 
 
-    x_fft = y_fft * k_fft              # (B, C, Ls)
-    x = torch.fft.ifft(x_fft, dim=-1)               # (B, C, Ls)
-
-    x = torch.sum(x, dim=-2, keepdim=True)  # Sum over channels
-
-    # Remove final sample to match conv1d transpose
     return torch.roll(x, 1, -1)
 
 ####################################################################################################

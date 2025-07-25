@@ -76,7 +76,6 @@ class HybrA(nn.Module):
             learned_kernels = tight_hybra(self.kernels, learned_kernels, d, Ls, fs, fit_eps = 1.0001, max_iter = 1000)  
 
         self.learned_kernels = nn.Parameter(learned_kernels, requires_grad=True)
-        self.learned_kernels_decoder = nn.Parameter(learned_kernels.clone(), requires_grad=True)
 
         self.hybra_kernels = F.conv1d(
             self.kernels.squeeze(1),
@@ -103,14 +102,8 @@ class HybrA(nn.Module):
         return circ_conv(x.unsqueeze(1), self.hybra_kernels, self.stride)
     
     def decoder(self, x:torch.Tensor) -> torch.Tensor:
-        hybra_kernels_decoder = F.conv1d(
-            self.kernels.squeeze(1),
-            self.learned_kernels_decoder,
-            groups=self.num_channels,
-            padding="same",
-        )
-        _, B = frame_bounds(hybra_kernels_decoder.squeeze(1), self.stride, None)
-        return circ_conv_transpose(x, hybra_kernels_decoder / B, self.stride).squeeze(1)
+        _, B = frame_bounds(self.hybra_kernels.squeeze(1), self.stride, None)
+        return circ_conv_transpose(x, self.hybra_kernels / B, self.stride).squeeze(1)
     
     # plotting methods
     
