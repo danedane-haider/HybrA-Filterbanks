@@ -25,7 +25,10 @@ Usage
 
 Construct an ISAC and HybrA filterbank, and plot the filter frequency responses. Transform an input audio signal into the corresponding learnable time-frequency representation, and plot it.
 
-.. code:: python
+.. code-block:: python
+   :linenos:
+   :caption: ISAC / HybrA example
+
    import torchaudio
    from hybra import ISAC, HybrA, ISACgram
 
@@ -42,7 +45,10 @@ Construct an ISAC and HybrA filterbank, and plot the filter frequency responses.
 
 It is also straightforward to include them in any model, e.g., as an encoder/decoder pair.
 
-.. code:: python
+.. code-block:: python
+   :linenos:
+   :caption: HybrA model example
+
    import torch
    import torch.nn as nn
    import torchaudio
