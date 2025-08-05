@@ -32,8 +32,8 @@ class ISAC(nn.Module):
                  num_channels:int=40,
                  fc_max:Union[float,int,None]=None,
                  stride:Union[int,None]=None,
-                 fs:int=16000, 
-                 L:int=16000,
+                 fs:int=None, 
+                 L:int=None,
                  supp_mult:float=1,
                  scale:str='mel',
                  tighten=False,
@@ -43,19 +43,21 @@ class ISAC(nn.Module):
                  verbose:bool=True):
         super().__init__()
 
-        [aud_kernels, d, fc, fc_min, fc_max, kernel_min, kernel_size, Ls] = audfilters(
+        [aud_kernels, d_25, fc, fc_min, fc_max, kernel_min, kernel_size, Ls, _] = audfilters(
             kernel_size=kernel_size, num_channels=num_channels, fc_max=fc_max, fs=fs, L=L, supp_mult=supp_mult, scale=scale
         )
 
         if stride is not None:
             d = stride
-            Ls = int(torch.ceil(torch.tensor(L / d)) * d)
+            Ls = int(torch.ceil(torch.tensor(Ls / d)) * d)
+        else:
+            d = d_25
 
         if verbose:
             print(f"Max. kernel size: {kernel_size}")
             print(f"Min. kernel size: {kernel_min}")
             print(f"Number of channels: {num_channels}")
-            print(f"Stride for min. 25% overlap: {d}")
+            print(f"Stride for min. 25% overlap: {d_25}")
             print(f"Signal length: {Ls}")
             
         self.aud_kernels = aud_kernels
@@ -101,10 +103,10 @@ class ISAC(nn.Module):
     
     # plotting methods
 
-    def ISACgram(self, x):
+    def ISACgram(self, x, fmax=None, vmin=None, log_scale=False):
         with torch.no_grad():
-            coefficients = self.forward(x)
-        ISACgram_(coefficients, self.fc, self.Ls, self.fs)
+            coefficients = self.forward(x).abs()
+        ISACgram_(c=coefficients, fc=self.fc, L=self.Ls, fs=self.fs, fmax=fmax, vmin=vmin, log_scale=log_scale)
 
     def plot_response(self):
         plot_response_(g=(self.kernels).cpu().detach().numpy(), fs=self.fs, scale=self.scale, plot_scale=True, fc_min=self.fc_min, fc_max=self.fc_max, kernel_min=self.kernel_min)

@@ -535,7 +535,7 @@ def modulate(g:torch.Tensor, fc:Union[float,int,torch.Tensor], fs:int):
 ####################################################################################################
 
 
-def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Union[float,int,None]=None, fs:int=16000, L:int=16000, supp_mult:float=1, scale:str='mel') -> tuple[torch.Tensor, int, int, Union[int,float], Union[int,float], int, int, int]:
+def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Union[float,int,None]=None, fs:int=None, L:int=None, supp_mult:float=1, scale:str='mel') -> tuple[torch.Tensor, int, int, Union[int,float], Union[int,float], int, int, int]:
     """
     Generate FIR filter kernels with length *kernel_size* equidistantly spaced on auditory frequency scales.
     
@@ -566,9 +566,13 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
     if num_channels <= 0:
         raise ValueError("num_channels must be a positive integer.")
     # check if fs is a positive integer
+    if fs is None:
+        raise ValueError("sampling rate must be set.")
     if not isinstance(fs, int) or fs <= 0:
         raise ValueError("fs must be a positive integer.")
-    if not isinstance(fs, int) or L <= 0:
+    if L is None:
+        L = fs
+    if not isinstance(L, int) or L <= 0:
         raise ValueError("L must be a positive integer.")
     if supp_mult < 0:
         raise ValueError("supp_mult must be a non-negative float.")
@@ -610,12 +614,18 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
 
     # checking the maximum kernel size
     if scale == 'elelog':
-        kernel_max = fs / 5 * 10 # capture frequencies of 5Hz for 10 cycles
-        kernel_size = kernel_max
-        fc_min = 0.1
+        cycles = 10
+        kernel_max = fs // 10 * cycles # capture frequencies of 10Hz for 10 cycles
+
+        if kernel_size is None:
+            kernel_size = kernel_max
+
+        fc_min = 10
+
         if fc_max is None:
             fc_max = fs // 2
-        kernel_min = int(fs / fc_max * 10)
+
+        kernel_min = int(fs / fc_max * cycles)
     else:
         fsupp_min = fctobw(0, scale)
         kernel_max = int(torch.minimum(torch.round(bw_conversion / fsupp_min * fs),torch.tensor(L)))
@@ -631,6 +641,7 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
 
         # get the bandwidth for the maximum kernel size and the associated center frequency
         fsupp_low = bw_conversion / kernel_size * fs
+
         fc_min = bwtofc(fsupp_low, scale)
 
         if fc_max is None:
@@ -660,7 +671,7 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
     tsupp_low = (torch.ones(num_low) * kernel_size).int()
     tsupp_high = torch.ones(num_high) * kernel_min
     if scale == 'elelog':
-        tsupp_aud = (torch.minimum(torch.tensor(kernel_max), torch.round(fs / fc[num_low:num_low+num_aud] * 10))).int()
+        tsupp_aud = (torch.minimum(torch.tensor(kernel_size), torch.round(fs / fc[num_low:num_low+num_aud] * cycles))).int()
         tsupp = torch.concatenate([tsupp_low, tsupp_aud, tsupp_high]).int()
     else:
         if num_low + num_high == num_channels:
@@ -673,12 +684,11 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
     
     if supp_mult < 1:
         tsupp = torch.max(torch.round(tsupp * supp_mult), torch.ones_like(tsupp)*8).int()
-        kernel_min = tsupp.min()
-        kernel_size = tsupp.max()
     else:
         tsupp = torch.min(torch.round(tsupp * supp_mult), torch.ones_like(tsupp)*L).int()
-        kernel_min = tsupp.min()
-        kernel_size = tsupp.max()
+
+    kernel_min = tsupp.min()
+    kernel_size = tsupp.max()
 
     # Decimation factor (stride) to get a nice frame and according signal length (lcm of d and Ls)
     # d = torch.floor(torch.min(fs / fsupp))
@@ -697,10 +707,10 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
     for m in range(1, num_channels - 1):
         g[m,:] = torch.sqrt(d) * modulate(firwin(tsupp[m], kernel_size), fc[m], fs)
 
-    _, B = frame_bounds(g, d, Ls)
-    g = g / B
+    # _, B = frame_bounds(g, d, Ls)
+    # g = g / B**0.5
 
-    return g, int(d), fc, fc_min, fc_max, kernel_min, kernel_size, Ls
+    return g, int(d), fc, fc_min, fc_max, kernel_min, kernel_size, Ls, tsupp
 
 ####################################################################################################
 ####################################################################################################
@@ -814,7 +824,7 @@ def plot_response(g, fs, scale='mel', plot_scale=False, fc_min=None, fc_max=None
     plt.tight_layout()
     plt.show()
 
-def ISACgram(coefficients, fc=None, L=None, fs=None, fc_max=None, log_scale=True, vmin=None, cmap='inferno'):
+def ISACgram(c, fc=None, L=None, fs=None, fmax=None, log_scale=False, vmin=None, cmap='inferno'):
     """Plot the ISAC coefficients with optional log scaling and colorbar.
 
     Args:
@@ -827,16 +837,15 @@ def ISACgram(coefficients, fc=None, L=None, fs=None, fc_max=None, log_scale=True
         vmin (float or None): Minimum value for dynamic range clipping.
         cmap (str): Matplotlib colormap name.
     """
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(10, 4))
 
-    c = coefficients[0].detach().cpu().numpy()
+    c = c[0].detach().cpu().numpy()
+
     if log_scale:
-        c = 20 * np.log10(np.abs(c)**2 + 1e-10)  # add epsilon to avoid log(0)
-    else:
-        c = np.abs(c)
+        c = np.log10(np.abs(c) + 1e-10)
 
-    if fc is not None and fc_max is not None:
-        c = c[:np.argmax(fc > fc_max), :]
+    if fc is not None and fmax is not None:
+        c = c[:np.argmax(fc > fmax), :]
 
     if vmin is not None:
         mesh = ax.pcolor(c, cmap=cmap, vmin=np.min(c)*vmin)
@@ -856,13 +865,13 @@ def ISACgram(coefficients, fc=None, L=None, fs=None, fc_max=None, log_scale=True
         num_time_labels = 10
         xticks = np.linspace(0, c.shape[1]-1, num_time_labels)
         ax.set_xticks(xticks)
-        ax.set_xticklabels([np.round(x, 1) for x in np.linspace(0, L/fs, num_time_labels)])
+        ax.set_xticklabels([np.round(x, 1) for x in np.linspace(0, L//fs, num_time_labels)])
 
         ax.set_ylabel('Frequency [Hz]')
         ax.set_xlabel('Time [s]')
     else:
-        ax.set_ylabel('Frequency Index')
-        ax.set_xlabel('Time Index')
+        ax.set_ylabel('Frequency index')
+        ax.set_xlabel('Time samples')
 
     plt.tight_layout()
     plt.show()

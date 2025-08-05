@@ -28,8 +28,8 @@ class HybrA(nn.Module):
                  num_channels:int=40,
                  stride:Union[int,None]=None,
                  fc_max:Union[float,int,None]=None,
-                 fs:int=16000, 
-                 L:int=16000,
+                 fs:int=None, 
+                 L:int=None,
                  supp_mult:float=1,
                  scale:str='mel',
                  tighten:bool=False,
@@ -44,7 +44,7 @@ class HybrA(nn.Module):
 
         if stride is not None:
             d = stride
-            Ls = int(torch.ceil(torch.tensor(L / d)) * d)
+            Ls = int(torch.ceil(torch.tensor(Ls / d)) * d)
 
         if verbose:
             print(f"Max. kernel size: {kernel_size}")
@@ -106,10 +106,10 @@ class HybrA(nn.Module):
     
     # plotting methods
     
-    def ISACgram(self, x):
+    def ISACgram(self, x, fmax=None):
         with torch.no_grad():
-            coefficients = self.forward(x)
-        ISACgram_(coefficients, self.fc, self.Ls, self.fs)
+            coefficients = self.forward(x).abs()
+        ISACgram_(c=coefficients, fc=self.fc, L=self.Ls, fs=self.fs, fmax=fmax)
 
     def plot_response(self):
         plot_response((self.hybra_kernels).squeeze().cpu().detach().numpy(), self.fs)
