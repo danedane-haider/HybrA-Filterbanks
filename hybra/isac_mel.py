@@ -82,7 +82,7 @@ class ISACSpec(nn.Module):
             self.register_buffer('kernels', aud_kernels)
 
         if avg_size is None:
-            averaging_kernels = torch.ones(self.num_channels, 1, min(1024, self.kernel_size) // self.stride)
+            averaging_kernels = torch.ones(self.num_channels, 1, min(1024, self.kernel_size) // self.stride // 2 * 2 + 1)
             # avg_size = torch.maximum(torch.tensor(2), tsupp // self.stride)
             # self.avg_max = avg_size.max().item()
             # averaging_kernels = torch.ones(self.num_channels, 1, self.avg_max)
