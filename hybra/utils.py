@@ -9,15 +9,28 @@ from typing import Union, Tuple
 ##################### Cool routines to study decimated filterbanks #################################
 ####################################################################################################
 
-def frame_bounds(w:torch.Tensor, d:int, Ls:Union[int,None]=None) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Computes the frame bounds of a filterbank given in impulse responses using the polyphase representation.
-    Parameters:
-        w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[num_channels, length]
-        d: Decimation (or downsampling) factor, must divide filter length!
+def frame_bounds(w: torch.Tensor, d: int, Ls: Union[int, None] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Compute frame bounds of a filterbank using polyphase representation.
+    
+    Frame bounds characterize the numerical stability and invertibility of the 
+    filterbank transform. Tight frames (A ≈ B) provide optimal stability.
+    
+    Args:
+        w (torch.Tensor): Impulse responses of shape (num_channels, length)
+        d (int): Decimation (stride) factor
+        Ls (int, optional): Signal length. If None, computed automatically. Default: None
+        
     Returns:
-        tuple:
-            A, B: Frame bounds
+        Tuple[torch.Tensor, torch.Tensor]: Lower and upper frame bounds (A, B)
+        
+    Note:
+        For d=1, reduces to computing min/max of power spectral density.
+        For d>1, uses polyphase analysis to compute worst-case eigenvalues.
+        
+    Example:
+        >>> w = torch.randn(40, 128)
+        >>> A, B = frame_bounds(w, d=4)
+        >>> condition_number = B / A
     """
     if Ls is None:
         Ls = int(torch.ceil(torch.tensor(w.shape[-1] * 2 / d)) * d)
@@ -54,14 +67,28 @@ def frame_bounds(w:torch.Tensor, d:int, Ls:Union[int,None]=None) -> Tuple[torch.
             B = torch.max(B, torch.max(lam))
         return (A/d).to(w_hat.device), (B/d).to(w_hat.device)
 
-def condition_number(w:torch.Tensor, d:int, Ls:Union[int,None]=None) -> torch.Tensor:
-    """
-    Computes the condition number of a filterbank.
-    Parameters:
-        w: Impulse responses of the filterbank as 2-D Tensor torch.tensor[num_channels, signal_length]
-        d: Decimation factor (stride), must divide signal_length!
+def condition_number(w: torch.Tensor, d: int, Ls: Union[int, None] = None) -> torch.Tensor:
+    """Compute condition number of a filterbank frame operator.
+    
+    The condition number κ = B/A quantifies numerical stability, where A and B
+    are the lower and upper frame bounds. Lower values indicate better stability.
+    
+    Args:
+        w (torch.Tensor): Impulse responses of shape (num_channels, signal_length)
+        d (int): Decimation factor (stride)
+        Ls (int, optional): Signal length. If None, computed automatically. Default: None
+        
     Returns:
-        kappa: Condition number
+        torch.Tensor: Condition number κ = B/A
+        
+    Note:
+        κ = 1 indicates a tight frame (optimal stability).
+        κ >> 1 suggests potential numerical instability.
+        
+    Example:
+        >>> w = torch.randn(40, 128)
+        >>> kappa = condition_number(w, d=4)
+        >>> print(f"Condition number: {kappa.item():.2f}")
     """
     A, B = frame_bounds(w, d, Ls)
     A = torch.max(A, torch.tensor(1e-6, dtype=A.dtype, device=A.device))  # Avoid division by zero
@@ -180,6 +207,29 @@ def upsample(x:torch.Tensor, d:int) -> torch.Tensor:
     return x_up
 
 def circ_conv(x: torch.Tensor, kernels: torch.Tensor, d: int = 1) -> torch.Tensor:
+    """Circular convolution with optional downsampling.
+    
+    Performs efficient circular convolution using FFT, followed by downsampling.
+    The kernels are automatically centered for proper phase alignment.
+    
+    Args:
+        x (torch.Tensor): Input signal of shape (..., signal_length)
+        kernels (torch.Tensor): Filter kernels of shape (num_channels, 1, kernel_length) 
+            or (num_channels, kernel_length)
+        d (int): Downsampling factor (stride). Default: 1
+        
+    Returns:
+        torch.Tensor: Convolved and downsampled output of shape (..., num_channels, output_length)
+        
+    Note:
+        Uses circular convolution which assumes periodic boundary conditions.
+        Kernels are automatically zero-padded and centered.
+        
+    Example:
+        >>> x = torch.randn(1, 1000)
+        >>> kernels = torch.randn(40, 128)
+        >>> y = circ_conv(x, kernels, d=4)
+    """
     L = x.shape[-1]
     x = x.to(kernels.dtype)
 
@@ -194,6 +244,29 @@ def circ_conv(x: torch.Tensor, kernels: torch.Tensor, d: int = 1) -> torch.Tenso
     return y[:, :, ::d]  
 
 def circ_conv_transpose(y: torch.Tensor, kernels: torch.Tensor, d: int = 1) -> torch.Tensor:
+    """Transpose (adjoint) of circular convolution with upsampling.
+    
+    Implements the adjoint operation of circ_conv for signal reconstruction.
+    Used in synthesis/decoder operations of filterbanks.
+    
+    Args:
+        y (torch.Tensor): Input coefficients of shape (..., num_channels, num_frames)
+        kernels (torch.Tensor): Filter kernels of shape (num_channels, 1, kernel_length)
+            or (num_channels, kernel_length)
+        d (int): Upsampling factor (stride). Default: 1
+        
+    Returns:
+        torch.Tensor: Reconstructed signal of shape (..., 1, signal_length)
+        
+    Note:
+        This is the mathematical adjoint, not the true inverse. For perfect reconstruction,
+        appropriate dual frame filters should be used.
+        
+    Example:
+        >>> coeffs = torch.randn(1, 40, 250)
+        >>> kernels = torch.randn(40, 128)
+        >>> x_recon = circ_conv_transpose(coeffs, kernels, d=4)
+    """
     L = y.shape[-1] * d
     y_up = upsample(y, d)
 
@@ -213,19 +286,33 @@ def circ_conv_transpose(y: torch.Tensor, kernels: torch.Tensor, d: int = 1) -> t
 ################### Routines for constructing auditory filterbanks #################################
 ####################################################################################################
 
-def freqtoaud(freq:Union[float,int,torch.Tensor], scale:str="erb", fs:Union[int,None]=None):
-    """
-    Converts frequencies (Hz) to auditory scale units.
-
-    Parameters:
-        freq (float or ndarray): Frequency value(s) in Hz.
-        scale (str): Auditory scale. Supported values are:
-                    - 'erb' (default)
-                    - 'mel'
-                    - 'bark'
-                    - 'log10'
+def freqtoaud(freq: Union[float, int, torch.Tensor], scale: str = "erb", 
+              fs: Union[int, None] = None) -> torch.Tensor:
+    """Convert frequencies from Hz to auditory scale units.
+    
+    Transforms linear frequency values to perceptually-motivated auditory scales
+    that better reflect human frequency discrimination.
+    
+    Args:
+        freq (Union[float, int, torch.Tensor]): Frequency value(s) in Hz
+        scale (str): Auditory scale type. One of {'erb', 'mel', 'bark', 'log10', 'elelog'}. Default: 'erb'
+        fs (int, optional): Sampling frequency (required for 'elelog' scale). Default: None
+        
     Returns:
-        float or ndarray: Corresponding auditory scale units.
+        torch.Tensor: Corresponding auditory scale units
+        
+    Raises:
+        ValueError: If unsupported scale is specified or fs is missing for 'elelog'
+        
+    Note:
+        - ERB: Equivalent Rectangular Bandwidth (Glasberg & Moore)
+        - MEL: Mel scale (perceptually uniform pitch)
+        - Bark: Bark scale (critical band rate)
+        - elelog: Logarithmic scale adapted for elephant hearing
+        
+    Example:
+        >>> freq_hz = torch.tensor([100, 1000, 8000])
+        >>> mel_units = freqtoaud(freq_hz, scale='mel')
     """
 
     scale = scale.lower()
@@ -262,7 +349,22 @@ def freqtoaud(freq:Union[float,int,torch.Tensor], scale:str="erb", fs:Union[int,
     else:
         raise ValueError(f"Unsupported scale: '{scale}'. Available options are: 'mel', 'erb', 'bark', 'log10', 'elelog'.")
 
-def audtofreq(aud:Union[float,int,torch.Tensor], scale:str="erb", fs:Union[int,None]=None):
+def audtofreq(aud: Union[float, int, torch.Tensor], scale: str = "erb", 
+              fs: Union[int, None] = None) -> torch.Tensor:
+    """Convert auditory scale units back to frequencies in Hz.
+    
+    Args:
+        aud (Union[float, int, torch.Tensor]): Auditory scale values
+        scale (str): Auditory scale type. One of {'erb', 'mel', 'bark', 'log10', 'elelog'}. Default: 'erb'
+        fs (int, optional): Sampling frequency (required for 'elelog' scale). Default: None
+        
+    Returns:
+        torch.Tensor: Corresponding frequencies in Hz
+        
+    Example:
+        >>> mel_units = torch.tensor([100, 1000, 2000])
+        >>> freq_hz = audtofreq(mel_units, scale='mel')
+    """
     if scale == "erb":
         return (1 / 0.00437) * (torch.exp(aud / 9.2645) - 1)
 
@@ -535,29 +637,52 @@ def modulate(g:torch.Tensor, fc:Union[float,int,torch.Tensor], fs:int):
 ####################################################################################################
 
 
-def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Union[float,int,None]=None, fs:int=None, L:int=None, supp_mult:float=1, scale:str='mel') -> tuple[torch.Tensor, int, int, Union[int,float], Union[int,float], int, int, int]:
-    """
-    Generate FIR filter kernels with length *kernel_size* equidistantly spaced on auditory frequency scales.
+def audfilters(kernel_size: Union[int, None] = None, num_channels: int = 96, 
+               fc_max: Union[float, int, None] = None, fs: int = None, L: int = None, 
+               supp_mult: float = 1, scale: str = 'mel') -> Tuple[torch.Tensor, int, torch.Tensor, 
+                                                                 Union[int, float], Union[int, float], 
+                                                                 int, int, int, torch.Tensor]:
+    """Generate auditory-inspired FIR filterbank kernels.
     
-    Parameters:
-        kernel_size (int): Size of the filter kernels (equals maximum window length).
-        num_channels (int): Number of channels.
-        fc_max (int): Maximum frequency (in Hz) that should lie on the aud scale.
-        fs (int): Sampling rate.
-        L (int): Signal length.
-        supp_mult (float): Support multiplier.
-        scale (str): Auditory scale.
+    Creates a bank of bandpass filters with center frequencies distributed according
+    to perceptual auditory scales (mel, erb, bark, etc.). Filters are designed with
+    variable bandwidths matching critical bands of human auditory perception.
     
+    Args:
+        kernel_size (int, optional): Maximum filter kernel size. If None, computed automatically. Default: None
+        num_channels (int): Number of frequency channels. Default: 96
+        fc_max (float, optional): Maximum center frequency in Hz. If None, uses fs//2. Default: None
+        fs (int): Sampling frequency in Hz. Default: None (required)
+        L (int): Signal length in samples. If None, uses fs. Default: None
+        supp_mult (float): Support multiplier for kernel sizing. Default: 1.0
+        scale (str): Auditory scale. One of {'mel', 'erb', 'bark', 'log10', 'elelog'}. Default: 'mel'
+        
     Returns:
-        tuple:
-            kernels (torch.Tensor): Generated kernels.
-            d (int): Downsampling rates.
-            fc (list): Center frequencies.
-            fc_min (int, float): First transition frequency.
-            fc_max (int, float): Second transition frequency.
-            kernel_min (int): Minimum kernel size.
-            kernel_size (int): Maximum kernel size.
-            L (int): Admissible signal length.
+        Tuple containing:
+            - kernels (torch.Tensor): Filter kernels of shape (num_channels, kernel_size)
+            - d (int): Recommended stride for 25% overlap
+            - fc (torch.Tensor): Center frequencies in Hz
+            - fc_min (Union[int, float]): Minimum center frequency
+            - fc_max (Union[int, float]): Maximum center frequency
+            - kernel_min (int): Minimum kernel size used
+            - kernel_size (int): Maximum kernel size used
+            - Ls (int): Adjusted signal length
+            - tsupp (torch.Tensor): Time support for each filter
+            
+    Raises:
+        ValueError: If parameters are invalid (negative values, unsupported scale, etc.)
+        
+    Note:
+        The filterbank construction follows auditory modeling principles where:
+        - Low frequencies use longer filters (better frequency resolution)
+        - High frequencies use shorter filters (better time resolution)
+        - Bandwidth scales according to critical band theory
+        
+    Example:
+        >>> kernels, stride, fc, _, _, _, _, Ls, _ = audfilters(
+        ...     kernel_size=128, num_channels=40, fs=16000, scale='mel'
+        ... )
+        >>> print(f"Generated {kernels.shape[0]} filters with stride {stride}")
     """
 
     # check if all inputs are valid
@@ -716,30 +841,49 @@ def audfilters(kernel_size:Union[int,None]=None, num_channels:int=96, fc_max:Uni
 ####################################################################################################
 ####################################################################################################
 
-def response(g, fs):
-    """Frequency response of the filters (Total power spectral density).
+def response(g: np.ndarray, fs: int) -> np.ndarray:
+    """Compute frequency responses of filter kernels.
     
     Args:
-        g (numpy.Array): Filter kernels.
-        fs (int): Sampling rate for plotting Hz.
+        g (np.ndarray): Filter kernels of shape (num_channels, kernel_size)
+        fs (int): Sampling frequency for frequency axis scaling
+        
+    Returns:
+        np.ndarray: Magnitude-squared frequency responses of shape (2*num_channels, fs//2)
+        
+    Note:
+        Computes responses for both analysis and conjugate filters.
     """
     g_full = np.concatenate([g, np.conj(g)], axis=0)
     G = np.abs(np.fft.fft(g_full, fs, axis=1)[:,:fs//2])**2
 
     return G
 
-def plot_response(g, fs, scale='mel', plot_scale=False, fc_min=None, fc_max=None, kernel_min=None, decoder=False):
-    """Plotting routine for the frequencs scale and the frequency responses of the filters.
+def plot_response(g: np.ndarray, fs: int, scale: str = 'mel', plot_scale: bool = False, 
+                 fc_min: Union[float, None] = None, fc_max: Union[float, None] = None, 
+                 kernel_min: Union[int, None] = None, decoder: bool = False) -> None:
+    """Plot frequency responses and auditory scale visualization of filters.
+    
+    Creates comprehensive visualization showing individual filter responses,
+    total power spectral density, and optional auditory scale mapping.
     
     Args:
-        g (numpy.Array): Filters.
-        fs (int): Sampling rate for plotting Hz.
-        scale (str): Auditory scale.
-        plot_scale (bool): Plot the scale or not.
-        fc_min (float): Lower transition frequency in Hz.
-        fc_max (float): Upper transition frequency in Hz.
-        kernel_min (int): Minimum kernel size.
-        decoder (bool): Plot for the synthesis fb.
+        g (np.ndarray): Filter kernels of shape (num_channels, kernel_size)
+        fs (int): Sampling frequency in Hz for frequency axis scaling
+        scale (str): Auditory scale name for scale plotting. Default: 'mel'
+        plot_scale (bool): Whether to plot the auditory scale mapping. Default: False
+        fc_min (float, optional): Lower transition frequency for scale visualization. Default: None
+        fc_max (float, optional): Upper transition frequency for scale visualization. Default: None
+        kernel_min (int, optional): Minimum kernel size for annotations. Default: None
+        decoder (bool): Whether filters are for synthesis (affects plot titles). Default: False
+        
+    Note:
+        This function displays plots and does not return values.
+        Creates 2-3 subplots depending on plot_scale parameter.
+        
+    Example:
+        >>> filters = np.random.randn(40, 128)
+        >>> plot_response(filters, fs=16000, scale='mel', plot_scale=True)
     """
     num_channels = g.shape[0]
     kernel_size = g.shape[1]
@@ -824,18 +968,32 @@ def plot_response(g, fs, scale='mel', plot_scale=False, fc_min=None, fc_max=None
     plt.tight_layout()
     plt.show()
 
-def ISACgram(c, fc=None, L=None, fs=None, fmax=None, log_scale=False, vmin=None, cmap='inferno'):
-    """Plot the ISAC coefficients with optional log scaling and colorbar.
-
+def ISACgram(c: torch.Tensor, fc: Union[torch.Tensor, None] = None, L: Union[int, None] = None, 
+             fs: Union[int, None] = None, fmax: Union[float, None] = None, 
+             log_scale: bool = False, vmin: Union[float, None] = None, cmap: str = 'inferno') -> None:
+    """Plot time-frequency representation of filterbank coefficients.
+    
+    Creates a spectrogram-like visualization with frequency on y-axis and time on x-axis.
+    Supports logarithmic scaling and frequency range limitation for better visualization.
+    
     Args:
-        coefficients (numpy.Array or torch.Tensor): Filterbank coefficients.
-        fc (numpy.Array): Center frequencies.
-        L (int): Signal length.
-        fs (int): Sampling rate.
-        fc_max (float or None): Max frequency to display.
-        log_scale (bool): Apply log scaling to coefficients.
-        vmin (float or None): Minimum value for dynamic range clipping.
-        cmap (str): Matplotlib colormap name.
+        c (torch.Tensor): Filterbank coefficients of shape (batch_size, num_channels, num_frames)
+        fc (torch.Tensor, optional): Center frequencies in Hz for y-axis labeling. Default: None
+        L (int, optional): Original signal length for time axis scaling. Default: None
+        fs (int, optional): Sampling frequency for time axis scaling. Default: None
+        fmax (float, optional): Maximum frequency to display in Hz. Default: None
+        log_scale (bool): Whether to apply log10 scaling to coefficients. Default: False
+        vmin (float, optional): Minimum value for dynamic range clipping. Default: None
+        cmap (str): Matplotlib colormap name. Default: 'inferno'
+        
+    Note:
+        This function displays a plot and does not return values.
+        Only processes the first batch element if batch_size > 1.
+        
+    Example:
+        >>> coeffs = torch.randn(1, 40, 250)
+        >>> fc = torch.linspace(100, 8000, 40)
+        >>> ISACgram(coeffs, fc=fc, L=16000, fs=16000, log_scale=True)
     """
     fig, ax = plt.subplots(figsize=(10, 4))
 

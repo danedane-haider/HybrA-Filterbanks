@@ -10,22 +10,40 @@ from hybra.utils import ISACgram as ISACgram_
 from hybra._fit_dual import fit, tight
 
 class ISAC(nn.Module):
-    """Constructor for an ISAC filterbank.
+    """ISAC (Invertible and Stable Auditory filterbank with Customizable kernels) filterbank.
+    
+    ISAC filterbanks are invertible and stable, perceptually-motivated filterbanks specifically
+    designed for machine learning integration. They provide perfect reconstruction properties 
+    with customizable kernel sizes and auditory-inspired frequency decomposition.
 
     Args:
-        kernel_size (int) - size of the kernels of the auditory filterbank
-        num_channels (int) - number of channels
-        fc_max (float) - maximum frequency on the auditory scale. if 'None', it is set to fs//2.
-        stride (int) - stride of the auditory filterbank. if 'None', stride is set to yield 25% overlap
-        fs (int) - sampling frequency
-        L (int) - signal length
-        supp_mult (float) - support multiplier.
-        scale (str) - auditory scale ('mel', 'erb', 'bark', 'log10', 'elelog'). elelog is a scale adapted to the hearing of elephants
-        tighten (bool) - whether to further tighten the filterbank
-        is_encoder_learnable (bool) - whether the encoder kernels are learnable
-        fir_decoder (bool) - computes an approximate perfect reconstruction decoder
-        is_decoder_learnable (bool) - whether the decoder kernels are learnable
-        verbose (bool) - whether to print information about the filterbank
+        kernel_size (int): Size of the filter kernels. Default: 128
+        num_channels (int): Number of frequency channels. Default: 40
+        fc_max (float, optional): Maximum frequency on the auditory scale in Hz. 
+            If None, uses fs//2. Default: None
+        stride (int, optional): Stride of the filterbank. If None, uses 25% overlap. Default: None
+        fs (int): Sampling frequency in Hz. Default: None (required)
+        L (int): Signal length in samples. Default: None (required)
+        supp_mult (float): Support multiplier for kernel sizing. Default: 1.0
+        scale (str): Auditory scale type. One of {'mel', 'erb', 'bark', 'log10', 'elelog'}. 
+            'elelog' is adapted for elephant hearing. Default: 'mel'
+        tighten (bool): Whether to apply tightening for better frame bounds. Default: False
+        is_encoder_learnable (bool): Whether encoder kernels are learnable parameters. Default: False
+        fit_decoder (bool): Whether to compute approximate perfect reconstruction decoder. Default: False
+        is_decoder_learnable (bool): Whether decoder kernels are learnable parameters. Default: False
+        verbose (bool): Whether to print filterbank information during initialization. Default: True
+        
+    Note:
+        ISAC filterbanks provide invertible and stable transforms with perfect reconstruction.
+        The filters have user-defined maximum temporal support and can serve as learnable
+        convolutional kernels. The frame bounds can be controlled through the `tighten` 
+        parameter for numerical stability.
+        
+    Example:
+        >>> filterbank = ISAC(kernel_size=128, num_channels=40, fs=16000, L=16000)
+        >>> x = torch.randn(1, 16000)
+        >>> coeffs = filterbank(x)
+        >>> reconstructed = filterbank.decoder(coeffs)
     """
     def __init__(self,
                  kernel_size:Union[int,None]=128,
@@ -94,32 +112,90 @@ class ISAC(nn.Module):
         else:    
             self.register_buffer('decoder_kernels', decoder_kernels)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass through the ISAC filterbank.
+        
+        Args:
+            x (torch.Tensor): Input signal of shape (batch_size, signal_length) or (signal_length,)
+            
+        Returns:
+            torch.Tensor: Filterbank coefficients of shape (batch_size, num_channels, num_frames)
+        """
         return circ_conv(x.unsqueeze(1), self.kernels, self.stride)
 
-    def decoder(self, x:torch.Tensor) -> torch.Tensor:
+    def decoder(self, x: torch.Tensor) -> torch.Tensor:
+        """Reconstruct signal from ISAC coefficients.
+        
+        Args:
+            x (torch.Tensor): Filterbank coefficients of shape (batch_size, num_channels, num_frames)
+            
+        Returns:
+            torch.Tensor: Reconstructed signal of shape (batch_size, signal_length)
+            
+        Note:
+            Uses frame bounds normalization for approximate perfect reconstruction.
+        """
         _, B = frame_bounds(self.decoder_kernels, self.stride, self.Ls)
         return circ_conv_transpose(x, self.decoder_kernels / B, self.stride).squeeze(1)
     
     # plotting methods
 
-    def ISACgram(self, x, fmax=None, vmin=None, log_scale=False):
+    def ISACgram(self, x: torch.Tensor, fmax: Union[float, None] = None, 
+                 vmin: Union[float, None] = None, log_scale: bool = False) -> None:
+        """Plot time-frequency representation of the signal.
+        
+        Args:
+            x (torch.Tensor): Input signal to visualize
+            fmax (float, optional): Maximum frequency to display in Hz. Default: None
+            vmin (float, optional): Minimum value for dynamic range clipping. Default: None
+            log_scale (bool): Whether to apply log scaling to coefficients. Default: False
+            
+        Note:
+            This method displays a plot and does not return values.
+        """
         with torch.no_grad():
             coefficients = self.forward(x).abs()
         ISACgram_(c=coefficients, fc=self.fc, L=self.Ls, fs=self.fs, fmax=fmax, vmin=vmin, log_scale=log_scale)
 
-    def plot_response(self):
+    def plot_response(self) -> None:
+        """Plot frequency response of the analysis filters.
+        
+        Note:
+            This method displays a plot and does not return values.
+        """
         plot_response_(g=(self.kernels).cpu().detach().numpy(), fs=self.fs, scale=self.scale, plot_scale=True, fc_min=self.fc_min, fc_max=self.fc_max, kernel_min=self.kernel_min)
 
-    def plot_decoder_response(self):
+    def plot_decoder_response(self) -> None:
+        """Plot frequency response of the synthesis (decoder) filters.
+        
+        Note:
+            This method displays a plot and does not return values.
+        """
         plot_response_(g=(self.decoder_kernels).detach().cpu().numpy(), fs=self.fs, scale=self.scale, decoder=True)
 
     @property
-    def condition_number(self):
+    def condition_number(self) -> torch.Tensor:
+        """Compute condition number of the analysis filterbank.
+        
+        Returns:
+            torch.Tensor: Condition number of the frame operator
+            
+        Note:
+            Lower condition numbers indicate better numerical stability.
+            Values close to 1.0 indicate tight frames.
+        """
         kernels = (self.kernels).squeeze()
         return condition_number(kernels, int(self.stride), self.Ls)
     
     @property
-    def condition_number_decoder(self):
+    def condition_number_decoder(self) -> torch.Tensor:
+        """Compute condition number of the synthesis filterbank.
+        
+        Returns:
+            torch.Tensor: Condition number of the decoder frame operator
+            
+        Note:
+            Lower condition numbers indicate better numerical stability for reconstruction.
+        """
         kernels = (self.decoder_kernels).squeeze()
         return condition_number(kernels, int(self.stride), self.Ls)

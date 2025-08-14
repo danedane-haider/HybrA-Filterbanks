@@ -6,9 +6,34 @@
 HybrA-Filterbanks
 =================
 
-About
------
-This repository contains the official implementations of `HybrA <https://arxiv.org/abs/2408.17358>`_ and `ISAC <https://arxiv.org/abs/2505.07709>`_. ISAC is an invertible and stable auditory filterbank with customizable kernel size, and HybrA extends ISAC via an additional set of learnable kernels. The two filterbanks are implemented as PyTorch nn.Module and therefore easily integrable into any neural network. As an essential mathematical foundation for the construction of ISAC and HybrA, the repository contains many fast frame-theoretic functions, such as the computation of framebounds, aliasing terms, and regularizers for tightening. 
+**Auditory-inspired filterbanks for deep learning**
+
+Welcome to HybrA-Filterbanks, a PyTorch library providing state-of-the-art auditory-inspired filterbanks for audio processing and deep learning applications.
+
+Overview
+--------
+
+This library contains the official implementations of:
+
+* **ISAC** (`paper <https://arxiv.org/abs/2505.07709>`_): Invertible and Stable Auditory filterbank with Customizable kernels for ML integration
+* **HybrA** (`paper <https://arxiv.org/abs/2408.17358>`_): Hybrid Auditory filterbank that extends ISAC with learnable filters
+* **ISACSpec**: Spectrogram variant with temporal averaging for robust feature extraction  
+* **ISACCC**: Cepstral coefficient extractor for speech recognition applications
+
+Key Features
+------------
+
+✨ **PyTorch Integration**: All filterbanks are implemented as ``nn.Module`` for seamless integration into neural networks
+
+🎯 **Auditory Modeling**: Based on human auditory perception principles (mel, ERB, bark scales)
+
+⚡ **Fast Implementation**: Optimized using FFT-based circular convolution
+
+🔧 **Flexible Configuration**: Customizable kernel sizes, frequency ranges, and scales
+
+📊 **Frame Theory**: Built-in functions for frame bounds, condition numbers, and stability analysis
+
+🎨 **Visualization**: Rich plotting capabilities for filter responses and time-frequency representations 
 
 Installation
 ------------
@@ -20,28 +45,88 @@ running:
 
    pip install hybra
 
-Usage
------
+Quick Start
+-----------
 
-Construct an ISAC and HybrA filterbank, and plot the filter frequency responses. Transform an input audio signal into the corresponding learnable time-frequency representation, and plot it.
+Basic ISAC Filterbank
+~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
    :linenos:
-   :caption: ISAC / HybrA example
 
-   import torchaudio
-   from hybra import ISAC, HybrA, ISACgram
+   import torch
+   from hybra import ISAC
 
-   x, fs = torchaudio.load("your_audio.wav")
-   x = torch.tensor(x, dtype=torch.float32).unsqueeze(0)
-   L = x.shape[-1]
+   # Create ISAC filterbank
+   filterbank = ISAC(
+       kernel_size=128, 
+       num_channels=40, 
+       fs=16000, 
+       L=16000, 
+       scale='mel'
+   )
 
-   isac_fb = ISAC(kernel_size=1024, num_channels=128, L=L, fs=fs)
-   isac_fb.plot_response()
+   # Process audio signal
+   x = torch.randn(1, 16000)  # Random signal for demo
+   coefficients = filterbank(x)
+   reconstructed = filterbank.decoder(coefficients)
 
-   y = isac_fb(x)
-   x_tilde = isac_fb.decoder(y)
-   ISACgram(y, isac_fb.fc, L=L, fs=fs)
+   # Visualize
+   filterbank.plot_response()
+   filterbank.ISACgram(x, log_scale=True)
+
+HybrA with Learnable Filters
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+   :linenos:
+
+   from hybra import HybrA
+
+   # Create hybrid filterbank with learnable components
+   hybrid_fb = HybrA(
+       kernel_size=128,
+       learned_kernel_size=23,
+       num_channels=40,
+       fs=16000,
+       L=16000
+   )
+
+   # Forward pass (supports gradients)
+   x = torch.randn(1, 16000, requires_grad=True)
+   y = hybrid_fb(x)
+
+   # Check condition number for stability
+   print(f"Condition number: {hybrid_fb.condition_number():.2f}")
+
+ISAC Spectrograms and MFCCs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+   :linenos:
+
+   from hybra import ISACSpec, ISACCC
+
+   # Spectrogram with temporal averaging
+   spectrogram = ISACSpec(
+       num_channels=40, 
+       fs=16000, 
+       L=16000, 
+       power=2.0,
+       is_log=True
+   )
+
+   # MFCC-like cepstral coefficients  
+   mfcc_extractor = ISACCC(
+       num_channels=40,
+       num_cc=13,
+       fs=16000,
+       L=16000
+   )
+
+   x = torch.randn(1, 16000)
+   spec = spectrogram(x)
+   mfccs = mfcc_extractor(x)
 
 It is also straightforward to include them in any model, e.g., as an encoder/decoder pair.
 
@@ -126,7 +211,23 @@ If you find our work valuable, please cite
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Documentation:
 
    api
+   examples
+   mathematical_background
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Links:
+
+   GitHub Repository <https://github.com/danedane-haider/HybrA-Filterbanks>
+   PyPI Package <https://pypi.org/project/hybra/>
+
+Indices and tables
+==================
+
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`
 

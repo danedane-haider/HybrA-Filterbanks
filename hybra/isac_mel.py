@@ -9,23 +9,41 @@ from hybra.utils import plot_response as plot_response_
 from hybra.utils import ISACgram as ISACgram_
 
 class ISACSpec(nn.Module):
-    """Constructor for an ISAC Mel spectrogram filterbank.
+    """ISAC spectrogram filterbank for time-frequency analysis.
+    
+    ISACSpec combines ISAC (Invertible and Stable Auditory filterbank with Customizable kernels) 
+    with temporal averaging to produce spectrogram-like representations. The filterbank applies 
+    auditory-inspired filters followed by temporal smoothing for robust feature extraction.
+
     Args:
-        kernel_size (int) - size of the kernels of the auditory filterbank
-        num_channels (int) - number of channels
-        stride (int) - stride of the auditory filterbank. if 'None', stride is set to yield 25% overlap
-        fc_max (float) - maximum frequency on the auditory scale. if 'None', it is set to fs//2.
-        fmax (float) - maximum frequency computed.
-        fs (int) - sampling frequency
-        L (int) - signal length
-        supp_mult (float) - support multiplier.
-        scale (str) - auditory scale ('mel', 'erb', 'bark', 'log10', 'elelog'). elelog is a scale adapted to the hearing of elephants
-        power (float) - power of the ISAC spectrogram
-        avg_size (int) - size of the averaging kernel. if 'None', it is set to kernel_size / stride.
-        is_log (bool) - whether to apply log to the output
-        is_encoder_learnable (bool) - whether the encoder kernels are learnable
-        is_avg_learnable (bool) - whether the averaging kernels are learnable
-        verbose (bool) - whether to print information about the filterbank
+        kernel_size (int, optional): Size of the filter kernels. If None, computed automatically. Default: None
+        num_channels (int): Number of frequency channels. Default: 40
+        stride (int, optional): Stride of the filterbank. If None, uses 25% overlap. Default: None
+        fc_max (float, optional): Maximum frequency on the auditory scale in Hz. 
+            If None, uses fs//2. Default: None
+        fmax (float, optional): Maximum frequency for output truncation in Hz. Default: None
+        fs (int): Sampling frequency in Hz. Default: None (required)
+        L (int): Signal length in samples. Default: None (required)
+        supp_mult (float): Support multiplier for kernel sizing. Default: 1.0
+        scale (str): Auditory scale type. One of {'mel', 'erb', 'bark', 'log10', 'elelog'}. 
+            'elelog' is adapted for elephant hearing. Default: 'mel'
+        power (float): Power applied to coefficients before averaging. Default: 2.0
+        avg_size (int, optional): Size of the temporal averaging kernel. 
+            If None, computed automatically. Default: None
+        is_log (bool): Whether to apply logarithm to the output. Default: False
+        is_encoder_learnable (bool): Whether encoder kernels are learnable parameters. Default: False
+        is_avg_learnable (bool): Whether averaging kernels are learnable parameters. Default: False
+        verbose (bool): Whether to print filterbank information during initialization. Default: True
+        
+    Note:
+        The temporal averaging provides robustness to time variations while preserving
+        spectral characteristics. The power parameter controls the nonlinearity applied
+        before averaging.
+        
+    Example:
+        >>> spectrogram = ISACSpec(num_channels=40, fs=16000, L=16000, power=2.0)
+        >>> x = torch.randn(1, 16000)
+        >>> spec = spectrogram(x)
     """
     def __init__(self,
                  kernel_size:Union[int,None]=None,
@@ -96,7 +114,18 @@ class ISACSpec(nn.Module):
         else:
             self.register_buffer('avg_kernels', averaging_kernels)
 
-    def forward(self, x:torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass through the ISACSpec filterbank.
+        
+        Args:
+            x (torch.Tensor): Input signal of shape (batch_size, signal_length) or (signal_length,)
+            
+        Returns:
+            torch.Tensor: Spectrogram coefficients of shape (batch_size, num_channels, num_frames)
+            
+        Note:
+            The output is temporally averaged and optionally log-scaled for robustness.
+        """
         x = circ_conv(x.unsqueeze(1), self.kernels, self.stride).abs()#**self.power
         x = F.conv1d(
             x,
@@ -110,10 +139,27 @@ class ISACSpec(nn.Module):
             x = torch.log(x + 1e-10)
         return x
 
-    def ISACgram(self, x, fmax=None, vmin=None, log_scale=False):
+    def ISACgram(self, x: torch.Tensor, fmax: Union[float, None] = None, 
+                 vmin: Union[float, None] = None, log_scale: bool = False) -> None:
+        """Plot time-frequency spectrogram representation of the signal.
+        
+        Args:
+            x (torch.Tensor): Input signal to visualize
+            fmax (float, optional): Maximum frequency to display in Hz. Default: None
+            vmin (float, optional): Minimum value for dynamic range clipping. Default: None
+            log_scale (bool): Whether to apply log scaling to coefficients. Default: False
+            
+        Note:
+            This method displays a plot and does not return values.
+        """
         with torch.no_grad():
             coefficients = self.forward(x).abs()
         ISACgram_(c=coefficients, fc=self.fc, L=self.Ls, fs=self.fs, fmax=fmax, vmin=vmin, log_scale=log_scale)
 
-    def plot_response(self):
+    def plot_response(self) -> None:
+        """Plot frequency response of the analysis filters.
+        
+        Note:
+            This method displays a plot and does not return values.
+        """
         plot_response_(g=(self.kernels).detach().numpy(), fs=self.fs, scale=True, fc_min=self.fc_min, fc_max=self.fc_max, kernel_min=self.kernel_min)
