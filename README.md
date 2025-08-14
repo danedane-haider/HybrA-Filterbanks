@@ -1,7 +1,31 @@
-![Logo](https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/HybrA.png)
+![Logo](https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/HybrA.png?raw=true)
 
-## About
-This repository contains the official implementations of [HybrA](https://arxiv.org/abs/2408.17358) and [ISAC](https://arxiv.org/abs/2505.07709). ISAC is an invertible and stable auditory filterbank with customizable kernel size, and HybrA extends ISAC via an additional set of learnable kernels. The two filterbanks are implemented as PyTorch nn.Module and therefore easily integrable into any neural network. As an essential mathematical foundation for the construction of ISAC and HybrA, the repository contains many fast frame-theoretic functions, such as the computation of framebounds, aliasing terms, and regularizers for tightening. 
+**Auditory-inspired filterbanks for deep learning**
+
+Welcome to HybrA-Filterbanks, a PyTorch library providing state-of-the-art auditory-inspired filterbanks for audio processing and deep learning applications.
+
+## Overview
+
+This library contains the official implementations of:
+
+* **ISAC** ([paper](https://arxiv.org/abs/2505.07709)): Invertible and Stable Auditory filterbank with Customizable kernels for ML integration
+* **HybrA** ([paper](https://arxiv.org/abs/2408.17358)): Hybrid Auditory filterbank that extends ISAC with learnable filters
+* **ISACSpec**: Spectrogram variant with temporal averaging for robust feature extraction  
+* **ISACCC**: Cepstral coefficient extractor for speech recognition applications
+
+## Key Features
+
+✨ **PyTorch Integration**: All filterbanks are implemented as `nn.Module` for seamless integration into neural networks
+
+🎯 **Auditory Modeling**: Based on human auditory perception principles (mel, ERB, bark scales)
+
+⚡ **Fast Implementation**: Optimized using FFT-based circular convolution
+
+🔧 **Flexible Configuration**: Customizable kernel sizes, frequency ranges, and scales
+
+📊 **Frame Theory**: Built-in functions for frame bounds, condition numbers, and stability analysis
+
+🎨 **Visualization**: Rich plotting capabilities for filter responses and time-frequency representations 
 
 ## Documentation
 [https://github.com/danedane-haider/HybrA-Filterbanks](https://danedane-haider.github.io/HybrA-Filterbanks/main/)
@@ -12,48 +36,116 @@ We publish all releases on PyPi. You can install the current version by running:
 pip install hybra
 ```
 
-## Usage
-Construct an ISAC and HybrA filterbank, and plot the filter frequency responses. Transform an input audio signal into the corresponding learnable time-frequency representation, and plot it.
-```python
-import torchaudio
-from hybra import ISAC, HybrA, ISACgram
+## Quick Start
 
+### Basic ISAC Filterbank
+
+```python
+import torch
+import torchaudio
+from hybra import ISAC
+
+# Load audio signal
 x, fs = torchaudio.load("your_audio.wav")
 x = torch.tensor(x, dtype=torch.float32).unsqueeze(0)
 L = x.shape[-1]
 
-isac_fb = ISAC(kernel_size=1024, num_channels=128, L=L, fs=fs)
+# Create ISAC filterbank
+isac_fb = ISAC(
+    kernel_size=1024, 
+    num_channels=128, 
+    L=L, 
+    fs=fs,
+    scale='mel'
+)
+
+# Visualize frequency response
 isac_fb.plot_response()
 ```
 Condition number: 1.01
 <img src="https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/plots/ISAC_response.png?raw=true" width="100%">
 
 ```python
+# Forward transform
 y = isac_fb(x)
-x_tilde = isac_fb.decoder(y)
-ISACgram(y, isac_fb.fc, L=L, fs=fs)
+x_reconstructed = isac_fb.decoder(y)
+
+# Visualize time-frequency representation
+isac_fb.ISACgram(x, log_scale=True)
 ```
 
 <img src="https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/plots/ISAC_coeff.png?raw=true" width="100%">
 
-```python
+### HybrA with Learnable Filters
 
-hybra_fb = HybrA(kernel_size=1024, learned_kernel_size=23, num_channels=128, L=L, fs=fs, tighten=True)
+```python
+from hybra import HybrA
+
+# Create hybrid filterbank with learnable components
+hybra_fb = HybrA(
+    kernel_size=1024,
+    learned_kernel_size=23, 
+    num_channels=128, 
+    L=L, 
+    fs=fs, 
+    tighten=True
+)
+
+# Visualize frequency response
 hybra_fb.plot_response()
+
+# Check condition number for stability
+print(f"Condition number: {hybra_fb.condition_number():.2f}")
 ```
 Condition number: 1.06
 <img src="https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/plots/HybrA_response.png?raw=true" width="100%">
 
 ```python
+# Forward pass (supports gradients for training)
 y = hybra_fb(x)
-x_tilde = hybra_fb.decoder(y)
-ISACgram(y, hybra_fb.fc, L=L, fs=fs)
+x_reconstructed = hybra_fb.decoder(y)
+
+# Visualize time-frequency representation
+hybra_fb.ISACgram(x, log_scale=True)
 ```
 
 <img src="https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/plots/HybrA_coeff.png?raw=true" width="100%">
 
+### ISAC Spectrograms and MFCCs
 
-It is also straightforward to include them in any model, e.g., as an encoder/decoder pair.
+```python
+from hybra import ISACSpec, ISACCC
+
+# Spectrogram with temporal averaging for robust feature extraction
+spectrogram = ISACSpec(
+    kernel_size=1024,
+    num_channels=40, 
+    L=L, 
+    fs=fs, 
+    power=2.0,
+    is_log=True
+)
+
+# MFCC-like cepstral coefficients for speech recognition
+mfcc_extractor = ISACCC(
+    kernel_size=1024,
+    num_channels=40,
+    num_cc=13, 
+    L=L, 
+    fs=fs
+)
+
+# Extract features
+spec_coeffs = spectrogram(x)
+mfcc_coeffs = mfcc_extractor(x)
+
+print(f"Spectrogram shape: {spec_coeffs.shape}")
+print(f"MFCC shape: {mfcc_coeffs.shape}")
+```
+
+### Integration with Neural Networks
+
+Filterbanks can be easily integrated into neural networks as encoder/decoder pairs:
 ```python
 import torch
 import torch.nn as nn
