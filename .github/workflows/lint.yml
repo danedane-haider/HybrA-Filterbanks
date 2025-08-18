@@ -15,6 +15,9 @@ jobs:
       - name: Setup Python environment
         run: uv sync
 
+      - name: Install ruff
+        run: uv add --dev ruff
+
       - name: Check formatting and linting
         run: |
           uv run ruff check .
