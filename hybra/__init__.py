@@ -5,7 +5,7 @@ including ISAC, HybrA, and variants for spectrograms and cepstral coefficients.
 
 Classes:
     ISAC: Invertible and Stable Auditory filterbank with Customizable kernels
-    HybrA: Hybrid Auditory filterbank combining fixed and learnable filters  
+    HybrA: Hybrid Auditory filterbank combining fixed and learnable filters
     ISACSpec: ISAC spectrogram with temporal averaging
     ISACCC: ISAC Cepstral Coefficients extractor
 
@@ -16,9 +16,9 @@ Example:
     >>> coeffs = filterbank(x)
 """
 
-from .isac import ISAC
 from .hybridfilterbank import HybrA
+from .isac import ISAC
 from .isac_mel import ISACSpec
 from .isac_mfcc import ISACCC
 
-__all__ = ['ISAC', 'HybrA', 'ISACSpec', 'ISACCC']
+__all__ = ["ISAC", "HybrA", "ISACSpec", "ISACCC"]
