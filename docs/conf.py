@@ -1,4 +1,5 @@
 import time
+
 import tomli
 
 with open("../pyproject.toml", "rb") as f:
