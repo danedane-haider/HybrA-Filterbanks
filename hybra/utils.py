@@ -1160,8 +1160,7 @@ def ISACgram(
     fmax: Union[float, None] = None,
     log_scale: bool = False,
     vmin: Union[float, None] = None,
-    cmap: str = "inferno",
-    filename: Union[str, None] = None,
+    cmap: str = "Greys",
 ) -> None:
     """Plot time-frequency representation of filterbank coefficients.
 
@@ -1227,6 +1226,5 @@ def ISACgram(
         ax.set_xlabel("Time samples")
 
     plt.tight_layout()
-    if filename is not None:
-        plt.savefig(filename, dpi=300)
+    plt.savefig('/Users/dani/Library/Mobile Documents/com~apple~CloudDocs/Documents/PhD/ELECOM/IBAC/rumble_spec.png', dpi=600)
     plt.show()
