@@ -1,6 +1,6 @@
 [project]
 name = "hybra"
-version = "2025.07.4"
+version = "2025.08.2"
 requires-python = ">= 3.10"
 dependencies = [
   "matplotlib",
@@ -33,4 +33,27 @@ doc = [
   "tomli",
   "sphinx-multiversion"
 ]
+
+[tool.ruff]
+line-length = 88
+target-version = "py38"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings  
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = ["E501"]  # Line too long (handled by formatter)
+
+[tool.ruff.lint.isort]
+known-first-party = ["hybra"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
