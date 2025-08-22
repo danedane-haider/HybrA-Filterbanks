@@ -1226,5 +1226,5 @@ def ISACgram(
         ax.set_xlabel("Time samples")
 
     plt.tight_layout()
-    #plt.savefig('/Users/dani/Library/Mobile Documents/com~apple~CloudDocs/Documents/PhD/ELECOM/IBAC/rumble_art.png', dpi=600)
+    #plt.savefig('/Users/dani/Library/Mobile Documents/com~apple~CloudDocs/Documents/PhD/ELECOM/IBAC/rumble_avg.png', dpi=600)
     plt.show()
