@@ -1161,6 +1161,7 @@ def ISACgram(
     log_scale: bool = False,
     vmin: Union[float, None] = None,
     cmap: str = "inferno",
+    filename: Union[str, None] = None,
 ) -> None:
     """Plot time-frequency representation of filterbank coefficients.
 
