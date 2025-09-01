@@ -21,7 +21,7 @@ class ISACCC(nn.Module):
     Args:
         kernel_size (int, optional): Size of the filter kernels. If None, computed automatically. Default: None
         num_channels (int): Number of frequency channels. Default: 40
-        stride (int, optional): Stride of the filterbank. If None, uses 25% overlap. Default: None
+        stride (int, optional): Stride of the filterbank. If None, uses 50% overlap. Default: None
         num_cc (int): Number of cepstral coefficients to extract. Default: 13
         fc_max (float, optional): Maximum frequency on the auditory scale in Hz.
             If None, uses fs//2. Default: None
@@ -30,10 +30,10 @@ class ISACCC(nn.Module):
         L (int): Signal length in samples. Default: 16000
         supp_mult (float): Support multiplier for kernel sizing. Default: 1.0
         power (float): Power applied to ISACSpec coefficients. Default: 2.0
-        scale (str): Auditory scale type. One of {'mel', 'erb', 'bark', 'log10', 'elelog'}.
+        scale (str): Auditory scale type. One of {'mel', 'erb', 'log10', 'elelog'}.
             'elelog' is adapted for elephant hearing. Default: 'mel'
         is_log (bool): Whether to apply log instead of dB conversion. Default: False
-        verbose (bool): Whether to print filterbank information during initialization. Default: True
+        verbose (bool): Whether to print filterbank information during initialization. Default: False
 
     Raises:
         ValueError: If num_cc > num_channels
@@ -63,7 +63,7 @@ class ISACCC(nn.Module):
         power: float = 2.0,
         scale: str = "mel",
         is_log: bool = False,
-        verbose: bool = True,
+        verbose: bool = False,
     ):
         super().__init__()
 
@@ -150,5 +150,4 @@ class ISACCC(nn.Module):
             scale=True,
             fc_min=self.isac.fc_min,
             fc_max=self.isac.fc_max,
-            kernel_min=self.isac.kernel_min,
         )

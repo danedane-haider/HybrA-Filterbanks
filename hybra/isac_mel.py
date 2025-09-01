@@ -19,14 +19,14 @@ class ISACSpec(nn.Module):
     Args:
         kernel_size (int, optional): Size of the filter kernels. If None, computed automatically. Default: None
         num_channels (int): Number of frequency channels. Default: 40
-        stride (int, optional): Stride of the filterbank. If None, uses 25% overlap. Default: None
+        stride (int, optional): Stride of the filterbank. If None, uses 50% overlap. Default: None
         fc_max (float, optional): Maximum frequency on the auditory scale in Hz.
             If None, uses fs//2. Default: None
         fmax (float, optional): Maximum frequency for output truncation in Hz. Default: None
         fs (int): Sampling frequency in Hz. Default: None (required)
         L (int): Signal length in samples. Default: None (required)
         supp_mult (float): Support multiplier for kernel sizing. Default: 1.0
-        scale (str): Auditory scale type. One of {'mel', 'erb', 'bark', 'log10', 'elelog'}.
+        scale (str): Auditory scale type. One of {'mel', 'erb', 'log10', 'elelog'}.
             'elelog' is adapted for elephant hearing. Default: 'mel'
         power (float): Power applied to coefficients before averaging. Default: 2.0
         avg_size (int, optional): Size of the temporal averaging kernel.
@@ -34,7 +34,7 @@ class ISACSpec(nn.Module):
         is_log (bool): Whether to apply logarithm to the output. Default: False
         is_encoder_learnable (bool): Whether encoder kernels are learnable parameters. Default: False
         is_avg_learnable (bool): Whether averaging kernels are learnable parameters. Default: False
-        verbose (bool): Whether to print filterbank information during initialization. Default: True
+        verbose (bool): Whether to print filterbank information during initialization. Default: False
 
     Note:
         The temporal averaging provides robustness to time variations while preserving
@@ -63,11 +63,11 @@ class ISACSpec(nn.Module):
         is_log=False,
         is_encoder_learnable=False,
         is_avg_learnable=False,
-        verbose: bool = True,
+        verbose: bool = False,
     ):
         super().__init__()
 
-        [aud_kernels, d, fc, fc_min, fc_max, kernel_min, kernel_size, Ls, tsupp] = (
+        [aud_kernels, d_50, fc, fc_min, fc_max, kernel_min, kernel_size, Ls, tsupp] = (
             audfilters(
                 kernel_size=kernel_size,
                 num_channels=num_channels,
@@ -82,12 +82,14 @@ class ISACSpec(nn.Module):
         if stride is not None:
             d = stride
             Ls = int(torch.ceil(torch.tensor(Ls / d)) * d)
+        else:
+            d = d_50
 
         if verbose:
             print(f"Max. kernel size: {kernel_size}")
             print(f"Min. kernel size: {kernel_min}")
             print(f"Number of channels: {num_channels}")
-            print(f"Stride for min. 25% overlap: {d}")
+            print(f"Stride for min. 50% overlap: {d_50}")
             print(f"Signal length: {Ls}")
 
         if fmax is not None:
@@ -201,5 +203,4 @@ class ISACSpec(nn.Module):
             scale=True,
             fc_min=self.fc_min,
             fc_max=self.fc_max,
-            kernel_min=self.kernel_min,
         )

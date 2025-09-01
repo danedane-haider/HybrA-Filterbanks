@@ -27,17 +27,17 @@ class ISAC(nn.Module):
         num_channels (int): Number of frequency channels. Default: 40
         fc_max (float, optional): Maximum frequency on the auditory scale in Hz.
             If None, uses fs//2. Default: None
-        stride (int, optional): Stride of the filterbank. If None, uses 25% overlap. Default: None
+        stride (int, optional): Stride of the filterbank. If None, uses 50% overlap. Default: None
         fs (int): Sampling frequency in Hz. Default: None (required)
         L (int): Signal length in samples. Default: None (required)
         supp_mult (float): Support multiplier for kernel sizing. Default: 1.0
-        scale (str): Auditory scale type. One of {'mel', 'erb', 'bark', 'log10', 'elelog'}.
+        scale (str): Auditory scale type. One of {'mel', 'erb', 'log10', 'elelog'}.
             'elelog' is adapted for elephant hearing. Default: 'mel'
         tighten (bool): Whether to apply tightening for better frame bounds. Default: False
         is_encoder_learnable (bool): Whether encoder kernels are learnable parameters. Default: False
         fit_decoder (bool): Whether to compute approximate perfect reconstruction decoder. Default: False
         is_decoder_learnable (bool): Whether decoder kernels are learnable parameters. Default: False
-        verbose (bool): Whether to print filterbank information during initialization. Default: True
+        verbose (bool): Whether to print filterbank information during initialization. Default: False
 
     Note:
         ISAC filterbanks provide invertible and stable transforms with perfect reconstruction.
@@ -66,11 +66,11 @@ class ISAC(nn.Module):
         is_encoder_learnable=False,
         fit_decoder=False,
         is_decoder_learnable=False,
-        verbose: bool = True,
+        verbose: bool = False,
     ):
         super().__init__()
 
-        [aud_kernels, d_25, fc, fc_min, fc_max, kernel_min, kernel_size, Ls, _] = (
+        [aud_kernels, d_50, fc, fc_min, fc_max, kernel_min, kernel_size, Ls, _] = (
             audfilters(
                 kernel_size=kernel_size,
                 num_channels=num_channels,
@@ -86,13 +86,13 @@ class ISAC(nn.Module):
             d = stride
             Ls = int(torch.ceil(torch.tensor(Ls / d)) * d)
         else:
-            d = d_25
+            d = d_50
 
         if verbose:
             print(f"Max. kernel size: {kernel_size}")
             print(f"Min. kernel size: {kernel_min}")
             print(f"Number of channels: {num_channels}")
-            print(f"Stride for min. 25% overlap: {d_25}")
+            print(f"Stride for min. 50% overlap: {d_50}")
             print(f"Signal length: {Ls}")
 
         self.aud_kernels = aud_kernels
@@ -206,7 +206,6 @@ class ISAC(nn.Module):
             plot_scale=True,
             fc_min=self.fc_min,
             fc_max=self.fc_max,
-            kernel_min=self.kernel_min,
         )
 
     def plot_decoder_response(self) -> None:

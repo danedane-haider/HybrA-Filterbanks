@@ -28,16 +28,16 @@ class HybrA(nn.Module):
         kernel_size (int): Kernel size of the auditory filterbank. Default: 128
         learned_kernel_size (int): Kernel size of the learned filterbank. Default: 23
         num_channels (int): Number of frequency channels. Default: 40
-        stride (int, optional): Stride of the auditory filterbank. If None, uses 25% overlap. Default: None
+        stride (int, optional): Stride of the auditory filterbank. If None, uses 50% overlap. Default: None
         fc_max (float, optional): Maximum frequency on the auditory scale in Hz. If None, uses fs//2. Default: None
         fs (int): Sampling frequency in Hz. Default: None (required)
         L (int): Signal length in samples. Default: None (required)
         supp_mult (float): Support multiplier for kernel sizing. Default: 1.0
-        scale (str): Auditory scale type. One of {'mel', 'erb', 'bark', 'log10', 'elelog'}.
+        scale (str): Auditory scale type. One of {'mel', 'erb', 'log10', 'elelog'}.
             'elelog' is adapted for elephant hearing. Default: 'mel'
         tighten (bool): Whether to apply tightening to improve frame bounds. Default: False
         det_init (bool): Whether to initialize learned filters as diracs (True) or randomly (False). Default: False
-        verbose (bool): Whether to print filterbank information during initialization. Default: True
+        verbose (bool): Whether to print filterbank information during initialization. Default: False
 
     Note:
         The hybrid construction h_m = g_m ⊛ ℓ_m combines ISAC auditory filters (g_m)
@@ -65,11 +65,11 @@ class HybrA(nn.Module):
         scale: str = "mel",
         tighten: bool = False,
         det_init: bool = False,
-        verbose: bool = True,
+        verbose: bool = False,
     ):
         super().__init__()
 
-        [aud_kernels, d, fc, _, fc_max, kernel_min, kernel_size, Ls] = audfilters(
+        [aud_kernels, d_50, fc, _, fc_max, kernel_min, kernel_size, Ls] = audfilters(
             kernel_size=kernel_size,
             num_channels=num_channels,
             fc_max=fc_max,
@@ -82,12 +82,14 @@ class HybrA(nn.Module):
         if stride is not None:
             d = stride
             Ls = int(torch.ceil(torch.tensor(Ls / d)) * d)
+        else:
+            d = d_50
 
         if verbose:
             print(f"Max. kernel size: {kernel_size}")
             print(f"Min. kernel size: {kernel_min}")
             print(f"Number of channels: {num_channels}")
-            print(f"Stride for min. 25% overlap: {d}")
+            print(f"Stride for min. 50% overlap: {d_50}")
             print(f"Signal length: {Ls}")
 
         self.register_buffer("kernels", aud_kernels)

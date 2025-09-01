@@ -324,7 +324,7 @@ def freqtoaud(
 
     Args:
         freq (Union[float, int, torch.Tensor]): Frequency value(s) in Hz
-        scale (str): Auditory scale type. One of {'erb', 'mel', 'bark', 'log10', 'elelog'}. Default: 'erb'
+        scale (str): Auditory scale type. One of {'erb', 'mel', 'log10', 'elelog'}. Default: 'erb'
         fs (int, optional): Sampling frequency (required for 'elelog' scale). Default: None
 
     Returns:
@@ -362,9 +362,9 @@ def freqtoaud(
             * torch.log(1 + torch.abs(freq) / 700)
         )
 
-    elif scale == "bark":
-        # Bark scale from Traunmuller (1990)
-        return torch.sign(freq) * ((26.81 / (1 + 1960 / torch.abs(freq))) - 0.53)
+    # elif scale == "bark":
+    #     # Bark scale from Traunmuller (1990)
+    #     return torch.sign(freq) * ((26.81 / (1 + 1960 / torch.abs(freq))) - 0.53)
 
     elif scale == "log10":
         # Logarithmic scale
@@ -384,7 +384,7 @@ def freqtoaud(
 
     else:
         raise ValueError(
-            f"Unsupported scale: '{scale}'. Available options are: 'mel', 'erb', 'bark', 'log10', 'elelog'."
+            f"Unsupported scale: '{scale}'. Available options are: 'mel', 'erb', 'log10', 'elelog'."
         )
 
 
@@ -397,7 +397,7 @@ def audtofreq(
 
     Args:
         aud (Union[float, int, torch.Tensor]): Auditory scale values
-        scale (str): Auditory scale type. One of {'erb', 'mel', 'bark', 'log10', 'elelog'}. Default: 'erb'
+        scale (str): Auditory scale type. One of {'erb', 'mel', 'log10', 'elelog'}. Default: 'erb'
         fs (int, optional): Sampling frequency (required for 'elelog' scale). Default: None
 
     Returns:
@@ -417,8 +417,8 @@ def audtofreq(
             * (torch.exp(torch.abs(aud) * torch.log(torch.tensor(17 / 7)) / 1000) - 1)
         )
 
-    elif scale == "bark":
-        return torch.sign(aud) * 1960 / (26.81 / (torch.abs(aud) + 0.53) - 1)
+    # elif scale == "bark":
+    #     return torch.sign(aud) * 1960 / (26.81 / (torch.abs(aud) + 0.53) - 1)
 
     elif scale == "log10":
         return 10**aud
@@ -437,7 +437,7 @@ def audtofreq(
 
     else:
         raise ValueError(
-            f"Unsupported scale: '{scale}'. Available options are: 'mel', 'erb', 'bark', 'log10', 'elelog'."
+            f"Unsupported scale: '{scale}'. Available options are: 'mel', 'erb', 'log10', 'elelog'."
         )
 
 
@@ -541,9 +541,7 @@ def audtofreq_mod(
     aud_crit_low = freqtoaud(fc_low, scale, fs)
     aud_crit_high = freqtoaud(fc_high, scale, fs)
     slope_low = (freqtoaud(fc_low * 1.01, scale, fs) - aud_crit_low) / (fc_low * 0.01)
-    slope_high = (freqtoaud(fc_high * 1.01, scale, fs) - aud_crit_high) / (
-        fc_high * 0.01
-    )
+    slope_high = (freqtoaud(fc_high * 1.01, scale, fs) - aud_crit_high) / (fc_high * 0.01)
 
     linear_low = aud < aud_crit_low
     linear_high = aud > aud_crit_high
@@ -602,16 +600,15 @@ def audspace_mod(
         raise ValueError("There is something wrong with fc_low and fc_high.")
 
 
-def fctobw(fc: Union[float, int, torch.Tensor], scale="erb"):
+def fctobw(fc: Union[float, int, torch.Tensor], scale="mel"):
     """
     Computes the critical bandwidth of a filter at a given center frequency.
 
     Parameters:
         fc (float or ndarray): Center frequency in Hz. Must be non-negative.
         audscale (str): Auditory scale. Supported values are:
-                    - 'erb': Equivalent Rectangular Bandwidth (default)
-                    - 'bark': Bark scale
-                    - 'mel': Mel scale
+                    - 'mel': Mel scale (default)
+                    - 'erb': Equivalent Rectangular Bandwidth
                     - 'log10': Logarithmic scale
 
     Returns:
@@ -626,8 +623,8 @@ def fctobw(fc: Union[float, int, torch.Tensor], scale="erb"):
     # Compute bandwidth based on the auditory scale
     if scale == "erb":
         bw = 24.7 + fc / 9.265
-    elif scale == "bark":
-        bw = 25 + 75 * (1 + 1.4e-6 * fc**2) ** 0.69
+    # elif scale == "bark":
+    #     bw = 25 + 75 * (1 + 1.4e-6 * fc**2) ** 0.69
     elif scale == "mel":
         bw = torch.log10(torch.tensor(17 / 7)) * (700 + fc) / 1000
     elif scale == "log10":
@@ -638,16 +635,15 @@ def fctobw(fc: Union[float, int, torch.Tensor], scale="erb"):
     return bw
 
 
-def bwtofc(bw: Union[float, int, torch.Tensor], scale="erb"):
+def bwtofc(bw: Union[float, int, torch.Tensor], scale="mel"):
     """
     Computes the center frequency corresponding to a given critical bandwidth.
 
     Parameters:
         bw (float or ndarray): Critical bandwidth. Must be non-negative.
         scale (str): Auditory scale. Supported values are:
-                 - 'erb': Equivalent Rectangular Bandwidth
-                 - 'bark': Bark scale
                  - 'mel': Mel scale
+                 - 'erb': Equivalent Rectangular Bandwidth
                  - 'log10': Logarithmic scale
 
     Returns:
@@ -662,8 +658,8 @@ def bwtofc(bw: Union[float, int, torch.Tensor], scale="erb"):
     # Compute center frequency based on the auditory scale
     if scale == "erb":
         fc = (bw - 24.7) * 9.265
-    elif scale == "bark":
-        fc = torch.sqrt(((bw - 25) / 75) ** (1 / 0.69) / 1.4e-6)
+    # elif scale == "bark":
+    #     fc = torch.sqrt(((bw - 25) / 75) ** (1 / 0.69) / 1.4e-6)
     elif scale == "mel":
         fc = 1000 * (bw / torch.log10(torch.tensor(17 / 7))) - 700
     elif scale == "log10":
@@ -742,7 +738,7 @@ def audfilters(
     """Generate auditory-inspired FIR filterbank kernels.
 
     Creates a bank of bandpass filters with center frequencies distributed according
-    to perceptual auditory scales (mel, erb, bark, etc.). Filters are designed with
+    to perceptual auditory scales (mel, erb, etc.). Filters are designed with
     variable bandwidths matching critical bands of human auditory perception.
 
     Args:
@@ -752,12 +748,12 @@ def audfilters(
         fs (int): Sampling frequency in Hz. Default: None (required)
         L (int): Signal length in samples. If None, uses fs. Default: None
         supp_mult (float): Support multiplier for kernel sizing. Default: 1.0
-        scale (str): Auditory scale. One of {'mel', 'erb', 'bark', 'log10', 'elelog'}. Default: 'mel'
+        scale (str): Auditory scale. One of {'mel', 'erb', 'log10', 'elelog'}. Default: 'mel'
 
     Returns:
         Tuple containing:
             - kernels (torch.Tensor): Filter kernels of shape (num_channels, kernel_size)
-            - d (int): Recommended stride for 25% overlap
+            - d (int): Recommended stride for 50% overlap
             - fc (torch.Tensor): Center frequencies in Hz
             - fc_min (Union[int, float]): Minimum center frequency
             - fc_max (Union[int, float]): Maximum center frequency
@@ -798,9 +794,9 @@ def audfilters(
         raise ValueError("L must be a positive integer.")
     if supp_mult < 0:
         raise ValueError("supp_mult must be a non-negative float.")
-    if scale not in ["mel", "erb", "bark", "log10", "elelog"]:
+    if scale not in ["mel", "erb", "log10", "elelog"]:
         raise ValueError(
-            "scale must be one of 'mel', 'erb', 'bark', 'log10', or 'elelog'."
+            "scale must be one of 'mel', 'erb', 'log10', or 'elelog'."
         )
     if fc_max is not None and (fc_max <= 0 or fc_max >= fs // 2):
         raise ValueError("fc_max must be a positive integer less than fs/2.")
@@ -826,8 +822,8 @@ def audfilters(
         bw_factor = 111.33
     elif scale == "log10":
         bw_factor = 0.2
-    elif scale == "bark":
-        bw_factor = 1.0
+    # elif scale == "bark":
+    #     bw_factor = 0.5
     elif scale == "elelog":
         bw_factor = 1
 
@@ -853,26 +849,13 @@ def audfilters(
         kernel_min = int(fs / fc_max * cycles)
     else:
         fsupp_min = fctobw(0, scale)
-        kernel_max = int(
-            torch.minimum(torch.round(bw_conversion / fsupp_min * fs), torch.tensor(L))
-        )
 
+        # if not specified, set the kernel size equal to the sampling frequency fs
         if kernel_size is None:
-            kernel_size = kernel_max
+            kernel_size = int(torch.minimum(torch.round(bw_conversion / fsupp_min * fs), torch.tensor(fs)))
 
-        if kernel_size > kernel_max:
-            bw_factor = bw_probe / kernel_size / fsupp_min * fs
-            bw_conversion = bw_probe / bw_factor  # * num_channels / 40
-            fsupp_min = fctobw(0, scale)
-            kernel_max = int(
-                torch.minimum(
-                    torch.round(bw_conversion / fsupp_min * fs), torch.tensor(L)
-                )
-            )
-
-        # get the bandwidth for the maximum kernel size and the associated center frequency
+        # get the bandwidth for the kernel size and the associated center frequency
         fsupp_low = bw_conversion / kernel_size * fs
-
         fc_min = bwtofc(fsupp_low, scale)
 
         if fc_max is None:
@@ -902,7 +885,7 @@ def audfilters(
 
     # get time supports
     tsupp_low = (torch.ones(num_low) * kernel_size).int()
-    tsupp_high = torch.ones(num_high) * kernel_min
+    tsupp_high = (torch.ones(num_high) * kernel_min).int()
     if scale == "elelog":
         tsupp_aud = (
             torch.minimum(
@@ -932,9 +915,8 @@ def audfilters(
     kernel_min = tsupp.min()
     kernel_size = tsupp.max()
 
-    # Decimation factor (stride) to get a nice frame and according signal length (lcm of d and Ls)
-    # d = torch.floor(torch.min(fs / fsupp))
-    d = torch.maximum(kernel_min // 4, torch.tensor(1))
+    # Decimation factor (stride) for 50% overlap
+    d = torch.maximum(kernel_min // 2, torch.tensor(1))
     Ls = int(torch.ceil(L / d) * d)
 
     ####################################################################################################
@@ -990,7 +972,6 @@ def plot_response(
     plot_scale: bool = False,
     fc_min: Union[float, None] = None,
     fc_max: Union[float, None] = None,
-    kernel_min: Union[int, None] = None,
     decoder: bool = False,
 ) -> None:
     """Plot frequency responses and auditory scale visualization of filters.
@@ -1005,7 +986,6 @@ def plot_response(
         plot_scale (bool): Whether to plot the auditory scale mapping. Default: False
         fc_min (float, optional): Lower transition frequency for scale visualization. Default: None
         fc_max (float, optional): Upper transition frequency for scale visualization. Default: None
-        kernel_min (int, optional): Minimum kernel size for annotations. Default: None
         decoder (bool): Whether filters are for synthesis (affects plot titles). Default: False
 
     Note:
@@ -1160,7 +1140,7 @@ def ISACgram(
     fmax: Union[float, None] = None,
     log_scale: bool = False,
     vmin: Union[float, None] = None,
-    cmap: str = "Greys",
+    cmap: str = "inferno",
 ) -> None:
     """Plot time-frequency representation of filterbank coefficients.
 
