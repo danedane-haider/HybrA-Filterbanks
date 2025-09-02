@@ -187,7 +187,7 @@ class HybridfilterbankModel(nn.Module):
         super().__init__()
 
         self.nsnet = Net()
-        self.fb = HybrA()
+        self.fb = HybrA(fs=16000)
 
     def forward(self, x):
         x = self.fb(x)
