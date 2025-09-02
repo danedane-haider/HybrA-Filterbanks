@@ -17,13 +17,13 @@ class ISACSpec(nn.Module):
     auditory-inspired filters followed by temporal smoothing for robust feature extraction.
 
     Args:
+        fs (int): Sampling frequency in Hz. (required)
         kernel_size (int, optional): Size of the filter kernels. If None, computed automatically. Default: None
         num_channels (int): Number of frequency channels. Default: 40
         stride (int, optional): Stride of the filterbank. If None, uses 50% overlap. Default: None
         fc_max (float, optional): Maximum frequency on the auditory scale in Hz.
             If None, uses fs//2. Default: None
         fmax (float, optional): Maximum frequency for output truncation in Hz. Default: None
-        fs (int): Sampling frequency in Hz. Default: None (required)
         L (int): Signal length in samples. Default: None (required)
         supp_mult (float): Support multiplier for kernel sizing. Default: 1.0
         scale (str): Auditory scale type. One of {'mel', 'erb', 'log10', 'elelog'}.
@@ -49,17 +49,17 @@ class ISACSpec(nn.Module):
 
     def __init__(
         self,
+        fs: int,
         kernel_size: Union[int, None] = None,
         num_channels: int = 40,
         stride: Union[int, None] = None,
         fc_max: Union[float, int, None] = None,
         fmax: Union[int, None] = None,
-        fs: int = None,
-        L: int = None,
+        L: Union[int, None] = None,
         supp_mult: float = 1,
         scale: str = "mel",
         power: float = 2.0,
-        avg_size: int = None,
+        avg_size: Union[int, None] = None,
         is_log=False,
         is_encoder_learnable=False,
         is_avg_learnable=False,
@@ -121,11 +121,6 @@ class ISACSpec(nn.Module):
                 1,
                 min(1024, self.kernel_size) // self.stride // 2 * 2 + 1,
             )
-            # avg_size = torch.maximum(torch.tensor(2), tsupp // self.stride)
-            # self.avg_max = avg_size.max().item()
-            # averaging_kernels = torch.ones(self.num_channels, 1, self.avg_max)
-            # for i in range(self.num_channels):
-            #    averaging_kernels[i, 0, self.avg_max//2:self.avg_max//2+avg_size[i]] = 1.0
         else:
             averaging_kernels = torch.ones([self.num_channels, 1, avg_size])
 

@@ -23,12 +23,12 @@ class ISAC(nn.Module):
     with customizable kernel sizes and auditory-inspired frequency decomposition.
 
     Args:
+        fs (int): Sampling frequency in Hz. (required)
         kernel_size (int): Size of the filter kernels. Default: 128
         num_channels (int): Number of frequency channels. Default: 40
         fc_max (float, optional): Maximum frequency on the auditory scale in Hz.
             If None, uses fs//2. Default: None
         stride (int, optional): Stride of the filterbank. If None, uses 50% overlap. Default: None
-        fs (int): Sampling frequency in Hz. Default: None (required)
         L (int): Signal length in samples. Default: None (required)
         supp_mult (float): Support multiplier for kernel sizing. Default: 1.0
         scale (str): Auditory scale type. One of {'mel', 'erb', 'log10', 'elelog'}.
@@ -54,12 +54,12 @@ class ISAC(nn.Module):
 
     def __init__(
         self,
+        fs: int,
         kernel_size: Union[int, None] = 128,
         num_channels: int = 40,
         fc_max: Union[float, int, None] = None,
         stride: Union[int, None] = None,
-        fs: int = None,
-        L: int = None,
+        L: Union[int, None] = None,
         supp_mult: float = 1,
         scale: str = "mel",
         tighten=False,

@@ -719,11 +719,11 @@ def modulate(g: torch.Tensor, fc: Union[float, int, torch.Tensor], fs: int):
 
 
 def audfilters(
+    fs: int,
     kernel_size: Union[int, None] = None,
     num_channels: int = 96,
     fc_max: Union[float, int, None] = None,
-    fs: int = None,
-    L: int = None,
+    L: Union[int, None] = None,
     supp_mult: float = 1,
     scale: str = "mel",
 ) -> Tuple[
@@ -744,10 +744,10 @@ def audfilters(
     variable bandwidths matching critical bands of human auditory perception.
 
     Args:
+        fs (int): Sampling frequency in Hz. (required)
         kernel_size (int, optional): Maximum filter kernel size. If None, computed automatically. Default: None
         num_channels (int): Number of frequency channels. Default: 96
         fc_max (float, optional): Maximum center frequency in Hz. If None, uses fs//2. Default: None
-        fs (int): Sampling frequency in Hz. Default: None (required)
         L (int): Signal length in samples. If None, uses fs. Default: None
         supp_mult (float): Support multiplier for kernel sizing. Default: 1.0
         scale (str): Auditory scale. One of {'mel', 'erb', 'log10', 'elelog'}. Default: 'mel'

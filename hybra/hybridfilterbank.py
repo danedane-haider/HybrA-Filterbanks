@@ -25,12 +25,12 @@ class HybrA(nn.Module):
     and frame-theoretic stability guarantees.
 
     Args:
+        fs (int): Sampling frequency in Hz. (required)
         kernel_size (int): Kernel size of the auditory filterbank. Default: 128
         learned_kernel_size (int): Kernel size of the learned filterbank. Default: 23
         num_channels (int): Number of frequency channels. Default: 40
         stride (int, optional): Stride of the auditory filterbank. If None, uses 50% overlap. Default: None
         fc_max (float, optional): Maximum frequency on the auditory scale in Hz. If None, uses fs//2. Default: None
-        fs (int): Sampling frequency in Hz. Default: None (required)
         L (int): Signal length in samples. Default: None (required)
         supp_mult (float): Support multiplier for kernel sizing. Default: 1.0
         scale (str): Auditory scale type. One of {'mel', 'erb', 'log10', 'elelog'}.
@@ -54,13 +54,13 @@ class HybrA(nn.Module):
 
     def __init__(
         self,
+        fs: int,
         kernel_size: int = 128,
         learned_kernel_size: int = 23,
         num_channels: int = 40,
         stride: Union[int, None] = None,
         fc_max: Union[float, int, None] = None,
-        fs: int = None,
-        L: int = None,
+        L: Union[int, None] = None,
         supp_mult: float = 1,
         scale: str = "mel",
         tighten: bool = False,
@@ -69,11 +69,11 @@ class HybrA(nn.Module):
     ):
         super().__init__()
 
-        [aud_kernels, d_50, fc, _, fc_max, kernel_min, kernel_size, Ls] = audfilters(
+        [aud_kernels, d_50, fc, fc_min, fc_max, kernel_min, kernel_size, Ls, _] = audfilters(
+            fs=fs,
             kernel_size=kernel_size,
             num_channels=num_channels,
             fc_max=fc_max,
-            fs=fs,
             L=L,
             supp_mult=supp_mult,
             scale=scale,
