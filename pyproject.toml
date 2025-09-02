@@ -1,6 +1,6 @@
 [project]
 name = "hybra"
-version = "2025.09.1"
+version = "2025.09.2"
 requires-python = ">= 3.10"
 dependencies = [
   "matplotlib",
