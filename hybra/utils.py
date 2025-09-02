@@ -541,7 +541,9 @@ def audtofreq_mod(
     aud_crit_low = freqtoaud(fc_low, scale, fs)
     aud_crit_high = freqtoaud(fc_high, scale, fs)
     slope_low = (freqtoaud(fc_low * 1.01, scale, fs) - aud_crit_low) / (fc_low * 0.01)
-    slope_high = (freqtoaud(fc_high * 1.01, scale, fs) - aud_crit_high) / (fc_high * 0.01)
+    slope_high = (freqtoaud(fc_high * 1.01, scale, fs) - aud_crit_high) / (
+        fc_high * 0.01
+    )
 
     linear_low = aud < aud_crit_low
     linear_high = aud > aud_crit_high
@@ -795,9 +797,7 @@ def audfilters(
     if supp_mult < 0:
         raise ValueError("supp_mult must be a non-negative float.")
     if scale not in ["mel", "erb", "log10", "elelog"]:
-        raise ValueError(
-            "scale must be one of 'mel', 'erb', 'log10', or 'elelog'."
-        )
+        raise ValueError("scale must be one of 'mel', 'erb', 'log10', or 'elelog'.")
     if fc_max is not None and (fc_max <= 0 or fc_max >= fs // 2):
         raise ValueError("fc_max must be a positive integer less than fs/2.")
 
@@ -852,7 +852,11 @@ def audfilters(
 
         # if not specified, set the kernel size equal to the sampling frequency fs
         if kernel_size is None:
-            kernel_size = int(torch.minimum(torch.round(bw_conversion / fsupp_min * fs), torch.tensor(fs)))
+            kernel_size = int(
+                torch.minimum(
+                    torch.round(bw_conversion / fsupp_min * fs), torch.tensor(fs)
+                )
+            )
 
         # get the bandwidth for the kernel size and the associated center frequency
         fsupp_low = bw_conversion / kernel_size * fs
@@ -1206,5 +1210,5 @@ def ISACgram(
         ax.set_xlabel("Time samples")
 
     plt.tight_layout()
-    #plt.savefig('/Users/dani/Library/Mobile Documents/com~apple~CloudDocs/Documents/PhD/ELECOM/IBAC/rumble_avg.png', dpi=600)
+    # plt.savefig('/Users/dani/Library/Mobile Documents/com~apple~CloudDocs/Documents/PhD/ELECOM/IBAC/rumble_avg.png', dpi=600)
     plt.show()
