@@ -379,8 +379,8 @@ def freqtoaud(
         fmax = fs // 2
         k = 0.88
         A = fmin / (1 - k)
-        alpha = np.log10(fmax / A + k)
-        return np.log((freq / A + k) / alpha)  # - np.log((fmin / A + k) / alpha)
+        alpha = torch.log10(torch.tensor(fmax / A + k))
+        return torch.log((freq / A + k) / alpha)  # - np.log((fmin / A + k) / alpha)
 
     else:
         raise ValueError(
@@ -432,8 +432,8 @@ def audtofreq(
         fmax = fs // 2
         k = 0.88
         A = fmin / (1 - k)
-        alpha = np.log10(fmax / A + k)
-        return A * (np.exp(aud) * alpha - k)
+        alpha = torch.log10(torch.tensor(fmax / A + k))
+        return A * (torch.exp(aud) * alpha - k)
 
     else:
         raise ValueError(

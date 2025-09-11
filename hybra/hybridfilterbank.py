@@ -69,14 +69,16 @@ class HybrA(nn.Module):
     ):
         super().__init__()
 
-        [aud_kernels, d_50, fc, fc_min, fc_max, kernel_min, kernel_size, Ls, _] = audfilters(
-            fs=fs,
-            kernel_size=kernel_size,
-            num_channels=num_channels,
-            fc_max=fc_max,
-            L=L,
-            supp_mult=supp_mult,
-            scale=scale,
+        [aud_kernels, d_50, fc, fc_min, fc_max, kernel_min, kernel_size, Ls, _] = (
+            audfilters(
+                fs=fs,
+                kernel_size=kernel_size,
+                num_channels=num_channels,
+                fc_max=fc_max,
+                L=L,
+                supp_mult=supp_mult,
+                scale=scale,
+            )
         )
 
         if stride is not None:
