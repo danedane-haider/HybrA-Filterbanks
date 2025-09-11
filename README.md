@@ -28,8 +28,8 @@ Welcome to HybrA-Filterbanks, a PyTorch library providing state-of-the-art audit
 
 This library contains the official implementations of:
 
-* **ISAC** ([paper](https://arxiv.org/abs/2505.07709)): Invertible and Stable Auditory filterbank with Customizable kernels for ML integration
-* **HybrA** ([paper](https://arxiv.org/abs/2408.17358)): Hybrid Auditory filterbank that extends ISAC with learnable filters
+* **ISAC** [![arXiv](https://img.shields.io/badge/arXiv-2505.07709-b31b1b.svg)](https://arxiv.org/abs/2505.07709): Invertible and Stable Auditory filterbank with Customizable kernels for ML integration
+* **HybrA** [![arXiv](https://img.shields.io/badge/arXiv-2408.17358-b31b1b.svg)](https://arxiv.org/abs/2408.17358): Hybrid Auditory filterbank that extends ISAC with learnable filters
 * **ISACSpec**: Spectrogram variant with temporal averaging for robust feature extraction  
 * **ISACCC**: Cepstral coefficient extractor for speech recognition applications
 
