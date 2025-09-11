@@ -1,5 +1,14 @@
 ![Logo](https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/HybrA.png?raw=true)
 
+[![PyPI version](https://badge.fury.io/py/hybra.svg)](https://badge.fury.io/py/hybra)
+[![Python](https://img.shields.io/pypi/pyversions/hybra.svg)](https://pypi.org/project/hybra/)
+[![License](https://img.shields.io/github/license/danedane-haider/HybrA-Filterbanks.svg)](https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/LICENSE)
+[![Tests](https://github.com/danedane-haider/HybrA-Filterbanks/workflows/Tests/badge.svg)](https://github.com/danedane-haider/HybrA-Filterbanks/actions)
+[![codecov](https://codecov.io/gh/danedane-haider/HybrA-Filterbanks/branch/main/graph/badge.svg)](https://codecov.io/gh/danedane-haider/HybrA-Filterbanks)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![PyPI downloads](https://img.shields.io/pypi/dm/hybra.svg)](https://pypi.org/project/hybra/)
+[![GitHub stars](https://img.shields.io/github/stars/danedane-haider/HybrA-Filterbanks.svg?style=social&label=Star)](https://github.com/danedane-haider/HybrA-Filterbanks)
+
 **Auditory-inspired filterbanks for deep learning**
 
 Welcome to HybrA-Filterbanks, a PyTorch library providing state-of-the-art auditory-inspired filterbanks for audio processing and deep learning applications.
