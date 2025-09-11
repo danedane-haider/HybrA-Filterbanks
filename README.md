@@ -11,6 +11,19 @@
 
 Welcome to HybrA-Filterbanks, a PyTorch library providing state-of-the-art auditory-inspired filterbanks for audio processing and deep learning applications.
 
+## Table of Contents
+- [Overview](#overview)
+- [Key Features](#key-features)
+- [Quick Start](#quick-start)
+- [API Documentation](#api-documentation)
+- [Installation](#installation)
+- [Examples](#examples)
+  - [Basic ISAC Filterbank](#basic-isac-filterbank)
+  - [HybrA with Learnable Filters](#hybra-with-learnable-filters)
+  - [ISAC Spectrograms and MFCCs](#isac-spectrograms-and-mfccs)
+  - [Integration with Neural Networks](#integration-with-neural-networks)
+- [Citation](#citation)
+
 ## Overview
 
 This library contains the official implementations of:
@@ -34,16 +47,41 @@ This library contains the official implementations of:
 
 🎨 **Visualization**: Rich plotting capabilities for filter responses and time-frequency representations 
 
-## Documentation
-[https://github.com/danedane-haider/HybrA-Filterbanks](https://danedane-haider.github.io/HybrA-Filterbanks/main/)
+## API Documentation
+
+📚 **[Complete API Documentation](https://danedane-haider.github.io/HybrA-Filterbanks/main/)** - Detailed reference for all classes and functions
+
+## Quick Start
+
+Get started with HybrA-Filterbanks in just a few lines of code:
+
+```python
+import torch
+import torchaudio
+from hybra import ISAC
+
+# Load audio and create filterbank
+audio, fs = torchaudio.load("your_audio.wav")
+filterbank = ISAC(kernel_size=1024, num_channels=128, L=audio.shape[-1], fs=fs)
+
+# Transform and reconstruct
+coefficients = filterbank(audio)
+reconstructed = filterbank.decoder(coefficients)
+
+# Visualize
+filterbank.plot_response()
+filterbank.ISACgram(audio, log_scale=True)
+```
 
 ## Installation
-We publish all releases on PyPi. You can install the current version by running:
-```
+
+We publish all releases on PyPI. Install with pip:
+
+```bash
 pip install hybra
 ```
 
-## Quick Start
+## Examples
 
 ### Basic ISAC Filterbank
 
@@ -53,15 +91,15 @@ import torchaudio
 from hybra import ISAC
 
 # Load audio signal
-x, fs = torchaudio.load("your_audio.wav")
-x = torch.tensor(x, dtype=torch.float32).unsqueeze(0)
-L = x.shape[-1]
+audio, fs = torchaudio.load("your_audio.wav")
+audio = torch.tensor(audio, dtype=torch.float32).unsqueeze(0)
+L = audio.shape[-1]
 
 # Create ISAC filterbank
 isac_fb = ISAC(
-    kernel_size=1024, 
-    num_channels=128, 
-    L=L, 
+    kernel_size=1024,
+    num_channels=128,
+    L=L,
     fs=fs,
     scale='mel'
 )
@@ -74,11 +112,11 @@ Condition number: 1.01
 
 ```python
 # Forward transform
-y = isac_fb(x)
-x_reconstructed = isac_fb.decoder(y)
+coefficients = isac_fb(audio)
+reconstructed = isac_fb.decoder(coefficients)
 
 # Visualize time-frequency representation
-isac_fb.ISACgram(x, log_scale=True)
+isac_fb.ISACgram(audio, log_scale=True)
 ```
 
 <img src="https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/plots/ISAC_coeff.png?raw=true" width="100%">
@@ -91,10 +129,10 @@ from hybra import HybrA
 # Create hybrid filterbank with learnable components
 hybra_fb = HybrA(
     kernel_size=1024,
-    learned_kernel_size=23, 
-    num_channels=128, 
-    L=L, 
-    fs=fs, 
+    learned_kernel_size=23,
+    num_channels=128,
+    L=L,
+    fs=fs,
     tighten=True
 )
 
@@ -109,11 +147,11 @@ Condition number: 1.06
 
 ```python
 # Forward pass (supports gradients for training)
-y = hybra_fb(x)
-x_reconstructed = hybra_fb.decoder(y)
+coefficients = hybra_fb(audio)
+reconstructed = hybra_fb.decoder(coefficients)
 
 # Visualize time-frequency representation
-hybra_fb.ISACgram(x, log_scale=True)
+hybra_fb.ISACgram(audio, log_scale=True)
 ```
 
 <img src="https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/plots/HybrA_coeff.png?raw=true" width="100%">
@@ -126,9 +164,9 @@ from hybra import ISACSpec, ISACCC
 # Spectrogram with temporal averaging for robust feature extraction
 spectrogram = ISACSpec(
     kernel_size=1024,
-    num_channels=40, 
-    L=L, 
-    fs=fs, 
+    num_channels=40,
+    L=L,
+    fs=fs,
     power=2.0,
     is_log=True
 )
@@ -137,14 +175,14 @@ spectrogram = ISACSpec(
 mfcc_extractor = ISACCC(
     kernel_size=1024,
     num_channels=40,
-    num_cc=13, 
-    L=L, 
+    num_cc=13,
+    L=L,
     fs=fs
 )
 
 # Extract features
-spec_coeffs = spectrogram(x)
-mfcc_coeffs = mfcc_extractor(x)
+spec_coeffs = spectrogram(audio)
+mfcc_coeffs = mfcc_extractor(audio)
 
 print(f"Spectrogram shape: {spec_coeffs.shape}")
 print(f"MFCC shape: {mfcc_coeffs.shape}")
