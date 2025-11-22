@@ -122,16 +122,12 @@ class ISAC(nn.Module):
         # set the parameters for the convolutional layers
 
         if is_encoder_learnable:
-            self.register_buffer(
-                "kernels", nn.Parameter(aud_kernels, requires_grad=True)
-            )
+            self.kernels = nn.Parameter(aud_kernels, requires_grad=True)
         else:
             self.register_buffer("kernels", aud_kernels)
 
         if is_decoder_learnable:
-            self.register_buffer(
-                "decoder_kernels", nn.Parameter(decoder_kernels, requires_grad=True)
-            )
+            self.decoder_kernels = nn.Parameter(decoder_kernels, requires_grad=True)
         else:
             self.register_buffer("decoder_kernels", decoder_kernels)
 

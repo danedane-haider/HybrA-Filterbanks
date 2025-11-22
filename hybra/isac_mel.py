@@ -109,9 +109,7 @@ class ISACSpec(nn.Module):
         self.power = power
 
         if is_encoder_learnable:
-            self.register_parameter(
-                "kernels", nn.Parameter(aud_kernels, requires_grad=True)
-            )
+            self.kernels = nn.Parameter(aud_kernels, requires_grad=True)
         else:
             self.register_buffer("kernels", aud_kernels)
 
@@ -125,9 +123,7 @@ class ISACSpec(nn.Module):
             averaging_kernels = torch.ones([self.num_channels, 1, avg_size])
 
         if is_avg_learnable:
-            self.register_parameter(
-                "avg_kernels", nn.Parameter(averaging_kernels, requires_grad=True)
-            )
+            self.avg_kernels = nn.Parameter(averaging_kernels, requires_grad=True)
         else:
             self.register_buffer("avg_kernels", averaging_kernels)
 
