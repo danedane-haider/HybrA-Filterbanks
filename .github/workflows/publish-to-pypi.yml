@@ -3,8 +3,33 @@ name: Publish Python 🐍 distribution 📦 to PyPI and TestPyPI
 on: push
 
 jobs:
+  test:
+    name: Run tests 🧪
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.x"
+    - name: Set up pip cache
+      if: runner.os == 'Linux'
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
+        restore-keys: ${{ runner.os }}-pip-
+    - name: Install uv
+      run: pipx install uv
+    - name: Install dependencies
+      run: uv sync --group test
+    - name: Run tests
+      run: uv run pytest tests/test_basic.py -v
+
   build:
     name: Build distribution 📦
+    needs: test
     runs-on: ubuntu-latest
 
     steps:
