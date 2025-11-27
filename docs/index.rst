@@ -20,6 +20,13 @@ This library contains the official implementations of:
 * **ISACSpec**: Spectrogram variant with temporal averaging for robust feature extraction  
 * **ISACCC**: Cepstral coefficient extractor for speech recognition applications
 
+.. figure:: _static/hybra-magnitude-training.gif
+   :alt: HybrA magnitude training animation
+   :align: center
+   :width: 720px
+
+   Magnitude learning dynamics of HybrA during training.
+
 Key Features
 ------------
 
@@ -230,4 +237,3 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
-

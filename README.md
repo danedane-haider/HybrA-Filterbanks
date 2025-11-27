@@ -32,6 +32,8 @@ This library contains the official implementations of:
 * **ISACSpec**: Spectrogram variant with temporal averaging for robust feature extraction  
 * **ISACCC**: Cepstral coefficient extractor for speech recognition applications
 
+<img src="hybra%20magnitude%20training.gif" alt="HybrA magnitude training animation" width="800">
+
 ## Key Features
 
 ✨ **PyTorch Integration**: All filterbanks are implemented as `nn.Module` for seamless integration into neural networks
