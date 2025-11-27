@@ -1,9 +1,7 @@
 ![Logo](https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/HybrA.png?raw=true)
 
-[![PyPI version](https://badge.fury.io/py/hybra.svg)](https://badge.fury.io/py/hybra)
 [![License](https://img.shields.io/github/license/danedane-haider/HybrA-Filterbanks.svg)](https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/LICENSE)
 [![Tests](https://github.com/danedane-haider/HybrA-Filterbanks/workflows/Tests/badge.svg)](https://github.com/danedane-haider/HybrA-Filterbanks/actions)
-[![PyPI downloads](https://img.shields.io/pypi/dm/hybra.svg)](https://pypi.org/project/hybra/)
 [![GitHub stars](https://img.shields.io/github/stars/danedane-haider/HybrA-Filterbanks.svg?style=social&label=Star)](https://github.com/danedane-haider/HybrA-Filterbanks)
 
 **Auditory-inspired filterbanks for deep learning**
