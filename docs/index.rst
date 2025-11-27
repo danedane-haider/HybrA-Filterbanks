@@ -45,8 +45,7 @@ Key Features
 Installation
 ------------
 
-We publish all releases on PyPi. You can install the current version by
-running:
+We publish all releases on `PyPI <https://pypi.org/project/hybra/>`_. You can install the current version by running:
 
 ::
 
