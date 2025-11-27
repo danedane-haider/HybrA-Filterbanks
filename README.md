@@ -74,7 +74,7 @@ filterbank.ISACgram(audio, log_scale=True)
 
 ## Installation
 
-We publish all releases on PyPI. Install with pip:
+We publish all releases on [PyPI](https://pypi.org/project/hybra/). Install with pip:
 
 ```bash
 pip install hybra
