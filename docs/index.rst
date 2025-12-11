@@ -20,6 +20,13 @@ This library contains the official implementations of:
 * **ISACSpec**: Spectrogram variant with temporal averaging for robust feature extraction  
 * **ISACCC**: Cepstral coefficient extractor for speech recognition applications
 
+.. figure:: _static/hybra-magnitude-training.gif
+   :alt: HybrA magnitude training animation
+   :align: center
+   :width: 720px
+
+   Magnitude learning dynamics of HybrA during training.
+
 Key Features
 ------------
 
@@ -38,8 +45,7 @@ Key Features
 Installation
 ------------
 
-We publish all releases on PyPi. You can install the current version by
-running:
+We publish all releases on `PyPI <https://pypi.org/project/hybra/>`_. You can install the current version by running:
 
 ::
 
@@ -230,4 +236,3 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
-

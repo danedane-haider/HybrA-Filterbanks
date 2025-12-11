@@ -1,10 +1,7 @@
 ![Logo](https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/HybrA.png?raw=true)
 
-[![PyPI version](https://badge.fury.io/py/hybra.svg)](https://badge.fury.io/py/hybra)
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://pypi.org/project/hybra/)
 [![License](https://img.shields.io/github/license/danedane-haider/HybrA-Filterbanks.svg)](https://github.com/danedane-haider/HybrA-Filterbanks/blob/main/LICENSE)
 [![Tests](https://github.com/danedane-haider/HybrA-Filterbanks/workflows/Tests/badge.svg)](https://github.com/danedane-haider/HybrA-Filterbanks/actions)
-[![PyPI downloads](https://img.shields.io/pypi/dm/hybra.svg)](https://pypi.org/project/hybra/)
 [![GitHub stars](https://img.shields.io/github/stars/danedane-haider/HybrA-Filterbanks.svg?style=social&label=Star)](https://github.com/danedane-haider/HybrA-Filterbanks)
 
 **Auditory-inspired filterbanks for deep learning**
@@ -32,6 +29,8 @@ This library contains the official implementations of:
 * **HybrA** [![arXiv](https://img.shields.io/badge/arXiv-2408.17358-b31b1b.svg)](https://arxiv.org/abs/2408.17358): Hybrid Auditory filterbank that extends ISAC with learnable filters
 * **ISACSpec**: Spectrogram variant with temporal averaging for robust feature extraction  
 * **ISACCC**: Cepstral coefficient extractor for speech recognition applications
+
+<img src="hybra%20magnitude%20training.gif" alt="HybrA magnitude training animation" width="800">
 
 ## Key Features
 
@@ -75,7 +74,7 @@ filterbank.ISACgram(audio, log_scale=True)
 
 ## Installation
 
-We publish all releases on PyPI. Install with pip:
+We publish all releases on [PyPI](https://pypi.org/project/hybra/). Install with pip:
 
 ```bash
 pip install hybra
