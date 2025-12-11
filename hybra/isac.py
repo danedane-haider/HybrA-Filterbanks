@@ -123,6 +123,10 @@ class ISAC(nn.Module):
 
         if is_encoder_learnable:
             self.kernels = nn.Parameter(aud_kernels, requires_grad=True)
+            # Create mask to prevent gradients on zero-padded regions
+            self.register_buffer("kernel_mask", (torch.abs(aud_kernels) != 0).float())
+            # Register hook to zero out gradients on zero-padded regions
+            self.kernels.register_hook(lambda grad: grad * self.kernel_mask)
         else:
             self.register_buffer("kernels", aud_kernels)
 
