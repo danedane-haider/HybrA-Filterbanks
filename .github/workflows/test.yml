@@ -31,6 +31,7 @@ jobs:
     - name: Run tests
       run: |
         uv run pytest tests/test_basic.py -v --cov=hybra --cov-report=xml
+        uv run pytest tests/test_isac.py::TestISACSupportRestriction -v
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4

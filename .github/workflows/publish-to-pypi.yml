@@ -25,7 +25,9 @@ jobs:
     - name: Install dependencies
       run: uv sync --group test
     - name: Run tests
-      run: uv run pytest tests/test_basic.py -v
+      run: |
+        uv run pytest tests/test_basic.py -v
+        uv run pytest tests/test_isac.py::TestISACSupportRestriction -v
 
   build:
     name: Build distribution 📦

@@ -123,6 +123,80 @@ class TestISACForwardPass:
                 assert param.grad is not None, f"No gradient for parameter {name}"
 
 
+class TestISACSupportRestriction:
+    """Test support-restricted learning behavior for ISAC kernels."""
+
+    def test_support_mask_matches_kernel_structure(self, small_test_parameters):
+        """Test that kernel_mask matches the initial kernel support."""
+        params = small_test_parameters.copy()
+        params["is_encoder_learnable"] = True
+
+        filterbank = ISAC(**params)
+
+        assert hasattr(filterbank, "kernel_mask")
+        assert filterbank.kernel_mask.shape == filterbank.kernels.shape
+
+        unique_vals = torch.unique(filterbank.kernel_mask)
+        assert torch.all((unique_vals == 0) | (unique_vals == 1))
+
+        kernel_nonzero = (torch.abs(filterbank.kernels.detach()) != 0).float()
+        assert torch.equal(filterbank.kernel_mask, kernel_nonzero)
+
+        masked_positions = filterbank.kernel_mask == 0
+        unmasked_positions = filterbank.kernel_mask == 1
+        assert masked_positions.any()
+        assert unmasked_positions.any()
+
+    def test_only_support_positions_receive_updates_after_backward_and_step(
+        self, small_test_parameters
+    ):
+        """Test masked kernel positions stay zero during training."""
+        params = small_test_parameters.copy()
+        params["is_encoder_learnable"] = True
+
+        filterbank = ISAC(**params)
+        optimizer = torch.optim.SGD([filterbank.kernels], lr=0.01, weight_decay=0.0)
+
+        x = torch.randn(2, params["L"])
+        masked_positions = filterbank.kernel_mask == 0
+        unmasked_positions = filterbank.kernel_mask == 1
+
+        kernels_before = filterbank.kernels.detach().clone()
+        masked_before = kernels_before[masked_positions]
+        unmasked_before = kernels_before[unmasked_positions]
+
+        assert torch.allclose(
+            masked_before, torch.zeros_like(masked_before), atol=0.0, rtol=0.0
+        )
+
+        optimizer.zero_grad()
+        loss = filterbank(x).abs().mean()
+        loss.backward()
+
+        grads = filterbank.kernels.grad
+        assert grads is not None
+
+        masked_grads = grads[masked_positions]
+        unmasked_grads = grads[unmasked_positions]
+
+        assert torch.allclose(
+            masked_grads, torch.zeros_like(masked_grads), atol=1e-12, rtol=0.0
+        )
+        assert torch.any(unmasked_grads.abs() > 1e-12)
+
+        optimizer.step()
+
+        kernels_after = filterbank.kernels.detach().clone()
+        masked_after = kernels_after[masked_positions]
+        unmasked_after = kernels_after[unmasked_positions]
+
+        assert torch.allclose(masked_after, masked_before, atol=0.0, rtol=0.0)
+        assert torch.allclose(
+            masked_after, torch.zeros_like(masked_after), atol=0.0, rtol=0.0
+        )
+        assert torch.any((unmasked_after - unmasked_before).abs() > 1e-12)
+
+
 class TestISACReconstruction:
     """Test ISAC perfect reconstruction properties."""
 
